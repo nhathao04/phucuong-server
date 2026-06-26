@@ -9,8 +9,11 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
-  @ApiOperation({ summary: "Create a new user" })
-  @ApiResponse({ status: 201, description: "User created successfully" })
+  @ApiOperation({ summary: "Create a new user with role" })
+  @ApiResponse({
+    status: 201,
+    description: "User created successfully with role info",
+  })
   create(@Body() createUserDto: CreateUserDto) {
     return this.usersService.create(createUserDto);
   }

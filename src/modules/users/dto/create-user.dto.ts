@@ -1,5 +1,11 @@
-import { IsEmail, IsString, MinLength } from "class-validator";
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import {
+  IsEmail,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MinLength,
+} from "class-validator";
 
 export class CreateUserDto {
   @ApiProperty({ example: "user@example.com" })
@@ -14,4 +20,13 @@ export class CreateUserDto {
   @ApiProperty({ example: "Nguyen Van A" })
   @IsString()
   fullName!: string;
+
+  @ApiPropertyOptional({
+    example: "7b8d7f12-4f86-4b5d-9c8f-2a1d4f4a9d11",
+    description:
+      "Role ID to assign to the new account. Defaults to user role when omitted.",
+  })
+  @IsOptional()
+  @IsUUID()
+  roleId?: string;
 }

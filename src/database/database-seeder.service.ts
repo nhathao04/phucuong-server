@@ -58,7 +58,9 @@ export class DatabaseSeederService {
       });
 
       await this.userRepository.save(admin);
-      console.log(`✓ Admin user created (email: ${adminEmail}, password: Admin@123456)`);
+      console.log(
+        `✓ Admin user created (email: ${adminEmail}, password: Admin@123456)`,
+      );
     }
   }
 
@@ -88,7 +90,9 @@ export class DatabaseSeederService {
       });
 
       await this.userRepository.save(staff);
-      console.log(`✓ Staff user created (email: ${staffEmail}, password: Staff@123456)`);
+      console.log(
+        `✓ Staff user created (email: ${staffEmail}, password: Staff@123456)`,
+      );
     }
   }
 

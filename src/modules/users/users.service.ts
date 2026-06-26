@@ -1,5 +1,6 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
+import * as bcrypt from "bcrypt";
 import { Repository } from "typeorm";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { Role } from "./entities/role.entity";
@@ -14,9 +15,37 @@ export class UsersService {
     private readonly rolesRepository: Repository<Role>,
   ) {}
 
-  create(createUserDto: CreateUserDto): Promise<User> {
-    const user = this.usersRepository.create(createUserDto);
-    return this.usersRepository.save(user);
+  async create(createUserDto: CreateUserDto): Promise<User> {
+    const defaultRole = await this.findRoleByName("user");
+    const role = createUserDto.roleId
+      ? await this.rolesRepository.findOne({
+          where: { id: createUserDto.roleId },
+        })
+      : defaultRole;
+
+    if (!role) {
+      throw new BadRequestException("Role not found");
+    }
+
+    const password = await bcrypt.hash(createUserDto.password, 10);
+    const user = this.usersRepository.create({
+      email: createUserDto.email,
+      password,
+      fullName: createUserDto.fullName,
+      roleId: role.id,
+    });
+
+    const savedUser = await this.usersRepository.save(user);
+    const createdUser = await this.usersRepository.findOne({
+      where: { id: savedUser.id },
+      relations: ["role"],
+    });
+
+    if (!createdUser) {
+      throw new BadRequestException("Failed to create user");
+    }
+
+    return createdUser;
   }
 
   findByEmail(email: string): Promise<User | null> {
@@ -25,6 +54,13 @@ export class UsersService {
 
   findById(id: string): Promise<User | null> {
     return this.usersRepository.findOne({ where: { id } });
+  }
+
+  findByIdWithRole(id: string): Promise<User | null> {
+    return this.usersRepository.findOne({
+      where: { id },
+      relations: ["role"],
+    });
   }
 
   async findByEmailWithRole(email: string): Promise<User | null> {

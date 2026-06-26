@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException, ForbiddenException } from "@nestjs/common";
+import {
+  Injectable,
+  UnauthorizedException,
+  ForbiddenException,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcrypt";
@@ -23,7 +27,10 @@ export class AuthService {
     });
   }
 
-  private buildLoginResponse(user: User, accessToken: string): LoginResponseDto {
+  private buildLoginResponse(
+    user: User,
+    accessToken: string,
+  ): LoginResponseDto {
     return {
       accessToken,
       user: {
@@ -82,9 +89,8 @@ export class AuthService {
       throw new UnauthorizedException("Account is inactive");
     }
 
-    const hasAdminOrStaffRole = await this.usersService.hasAdminOrStaffRole(
-      user,
-    );
+    const hasAdminOrStaffRole =
+      await this.usersService.hasAdminOrStaffRole(user);
     if (!hasAdminOrStaffRole) {
       throw new ForbiddenException("Only admin or staff can access");
     }
