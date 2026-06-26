@@ -40,7 +40,7 @@ export const typeOrmAsyncConfig = (
     EmailOutbox,
   ],
   synchronize: false,
-  logging: configService.get<string>("NODE_ENV") === "development",
+  logging: ["error", "warn"],
   migrations: ["dist/database/migrations/*.js"],
   migrationsRun: false,
   autoLoadEntities: true,

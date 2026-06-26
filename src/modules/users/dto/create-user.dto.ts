@@ -5,6 +5,7 @@ import {
   IsString,
   IsUUID,
   MinLength,
+  MaxLength,
 } from "class-validator";
 
 export class CreateUserDto {
@@ -29,4 +30,21 @@ export class CreateUserDto {
   @IsOptional()
   @IsUUID()
   roleId?: string;
+}
+
+export class CreateRoleDto {
+  @ApiProperty({ example: "moderator", description: "Unique role name" })
+  @IsString()
+  @MinLength(2)
+  @MaxLength(50)
+  name!: string;
+
+  @ApiProperty({
+    example: "Can manage content but cannot access admin settings",
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  description?: string;
 }

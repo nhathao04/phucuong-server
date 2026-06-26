@@ -1,7 +1,11 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import * as bcrypt from "bcrypt";
-import { Repository } from "typeorm";
+import { QueryFailedError, Repository } from "typeorm";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { Role } from "./entities/role.entity";
 import { User } from "./entities/user.entity";
@@ -16,6 +20,11 @@ export class UsersService {
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<User> {
+    const existingUser = await this.findByEmail(createUserDto.email);
+    if (existingUser) {
+      throw new ConflictException("Email already exists");
+    }
+
     const defaultRole = await this.findRoleByName("user");
     const role = createUserDto.roleId
       ? await this.rolesRepository.findOne({
@@ -35,17 +44,28 @@ export class UsersService {
       roleId: role.id,
     });
 
-    const savedUser = await this.usersRepository.save(user);
-    const createdUser = await this.usersRepository.findOne({
-      where: { id: savedUser.id },
-      relations: ["role"],
-    });
+    try {
+      const savedUser = await this.usersRepository.save(user);
+      const createdUser = await this.usersRepository.findOne({
+        where: { id: savedUser.id },
+        relations: ["role"],
+      });
 
-    if (!createdUser) {
-      throw new BadRequestException("Failed to create user");
+      if (!createdUser) {
+        throw new BadRequestException("Failed to create user");
+      }
+
+      return createdUser;
+    } catch (error) {
+      if (error instanceof QueryFailedError) {
+        const driverError = error.driverError as { code?: string };
+        if (driverError.code === "23505") {
+          throw new ConflictException("Email already exists");
+        }
+      }
+
+      throw error;
     }
-
-    return createdUser;
   }
 
   findByEmail(email: string): Promise<User | null> {
@@ -80,6 +100,11 @@ export class UsersService {
   }
 
   async createRole(name: string, description?: string): Promise<Role> {
+    const existingRole = await this.findRoleByName(name);
+    if (existingRole) {
+      throw new BadRequestException("Role already exists");
+    }
+
     const role = this.rolesRepository.create({ name, description });
     return this.rolesRepository.save(role);
   }
