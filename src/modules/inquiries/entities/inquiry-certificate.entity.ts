@@ -1,4 +1,5 @@
 import {
+  Column,
   Entity,
   JoinColumn,
   ManyToOne,
@@ -31,6 +32,9 @@ export class InquiryCertificate {
   )
   @JoinColumn({ name: "certificateId" })
   certificate!: Certificate;
+
+  @Column({ type: "text", nullable: true })
+  otherText!: string | null;
 
   @CreateDateColumn()
   createdAt!: Date;

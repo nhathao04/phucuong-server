@@ -32,7 +32,7 @@ export class StaffRoleGuard implements CanActivate {
       throw new ForbiddenException("Only admin or staff can access");
     }
 
-    if (!["admin", "staff"].includes(user.role.name)) {
+    if (!["Admin", "Staff"].includes(user.role.name)) {
       throw new ForbiddenException("Only admin or staff can access");
     }
 

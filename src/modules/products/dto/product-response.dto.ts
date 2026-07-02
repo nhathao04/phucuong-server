@@ -1,4 +1,77 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { ProductStatus } from "../entities/product.entity";
+
+export class ProductAttributeMappingSummaryDto {
+  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
+  id!: string;
+
+  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440001" })
+  attributeId!: string;
+
+  @ApiPropertyOptional({ example: "coconut_size" })
+  attributeCode!: string | null;
+
+  @ApiPropertyOptional({ example: "Coconut Size" })
+  attributeName!: string | null;
+
+  @ApiPropertyOptional({ example: "550e8400-e29b-41d4-a716-446655440002" })
+  defaultOptionId!: string | null;
+
+  @ApiPropertyOptional({ example: "Medium" })
+  defaultOptionValue!: string | null;
+
+  @ApiProperty({ example: true })
+  required!: boolean;
+
+  @ApiProperty({ example: 0 })
+  sortOrder!: number;
+
+  @ApiPropertyOptional({
+    type: "object",
+    additionalProperties: true,
+  })
+  metadata!: Record<string, unknown> | null;
+}
+
+export class ProductContainerConfigSummaryDto {
+  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
+  id!: string;
+
+  @ApiProperty({ example: "20FT" })
+  containerCode!: string;
+
+  @ApiProperty({ example: "20ft Dry Container" })
+  containerName!: string;
+
+  @ApiProperty({ example: "12.00" })
+  capacityMt!: string;
+
+  @ApiProperty({ example: false })
+  isDefault!: boolean;
+
+  @ApiPropertyOptional({ example: "Preferred for UAE market" })
+  notes!: string | null;
+}
+
+export class ProductTradeTermSummaryDto {
+  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
+  id!: string;
+
+  @ApiProperty({ example: 1 })
+  tradeTermId!: number;
+
+  @ApiProperty({ example: "FOB" })
+  code!: string;
+
+  @ApiProperty({ example: "Free On Board" })
+  name!: string;
+
+  @ApiProperty({ example: false })
+  isDefault!: boolean;
+
+  @ApiProperty({ example: 0 })
+  sortOrder!: number;
+}
 
 export class ProductSummaryDto {
   @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
@@ -10,19 +83,60 @@ export class ProductSummaryDto {
   @ApiProperty({ example: "organic-cashew-nuts" })
   slug!: string;
 
-  @ApiPropertyOptional({ example: "Premium cashew nuts for export" })
-  description!: string | null;
+  @ApiPropertyOptional({ example: "PC-DRIED-001" })
+  productCode!: string | null;
+
+  @ApiPropertyOptional({ example: "category-uuid" })
+  productCategoryId!: string | null;
+
+  @ApiPropertyOptional({ example: "Organic Cashew Nuts | Export Supplier" })
+  seoTitle!: string | null;
 
   @ApiPropertyOptional({
-    example: "https://cdn.example.com/products/cashew.jpg",
+    example: "Premium export quality cashew nuts for B2B buyers.",
   })
-  image!: string | null;
+  metaDescription!: string | null;
 
-  @ApiPropertyOptional({ example: "20kg" })
-  containerCapacity!: string | null;
+  @ApiPropertyOptional({ example: "organic cashew nuts" })
+  focusKeyword!: string | null;
 
-  @ApiPropertyOptional({ example: "20FT" })
-  containerType!: string | null;
+  @ApiPropertyOptional({
+    example: "Premium cashew nuts for export",
+  })
+  description!: string | null;
+
+  @ApiPropertyOptional({ example: "draft", enum: ProductStatus })
+  status!: ProductStatus;
+
+  @ApiProperty({ example: 0 })
+  sortOrder!: number;
+
+  @ApiProperty({ example: false })
+  isFeatured!: boolean;
+
+  @ApiPropertyOptional({ example: "0801.32" })
+  hsCode!: string | null;
+
+  @ApiPropertyOptional({ example: "Ben Tre, Vietnam" })
+  origin!: string | null;
+
+  @ApiPropertyOptional({ example: "Cat Lai Port" })
+  exportPort!: string | null;
+
+  @ApiPropertyOptional({ example: "12 months" })
+  shelfLife!: string | null;
+
+  @ApiPropertyOptional({ example: "Store in a cool, dry place" })
+  storageCondition!: string | null;
+
+  @ApiProperty({ example: false })
+  sampleAvailable!: boolean;
+
+  @ApiProperty({ example: false })
+  labReportAvailable!: boolean;
+
+  @ApiProperty({ example: true })
+  isActive!: boolean;
 
   @ApiProperty({ example: "2026-06-28T10:00:00.000Z" })
   createdAt!: Date;
@@ -32,23 +146,14 @@ export class ProductSummaryDto {
 }
 
 export class ProductDetailDto extends ProductSummaryDto {
-  @ApiPropertyOptional({ example: "Full specification content" })
-  specification!: string | null;
+  @ApiProperty({ type: [ProductAttributeMappingSummaryDto] })
+  attributeMappings!: ProductAttributeMappingSummaryDto[];
 
-  @ApiPropertyOptional({ example: "Packing details content" })
-  packing!: string | null;
+  @ApiProperty({ type: [ProductContainerConfigSummaryDto] })
+  containerConfigs!: ProductContainerConfigSummaryDto[];
 
-  @ApiPropertyOptional({ example: "Applications content" })
-  applications!: string | null;
-
-  @ApiPropertyOptional({
-    type: "object",
-    additionalProperties: true,
-    example: {
-      brochure: "https://cdn.example.com/documents/brochure.pdf",
-    },
-  })
-  documents!: Record<string, unknown> | null;
+  @ApiProperty({ type: [ProductTradeTermSummaryDto] })
+  tradeTerms!: ProductTradeTermSummaryDto[];
 }
 
 export class ProductListResponseDto {

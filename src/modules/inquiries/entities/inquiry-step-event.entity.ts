@@ -30,6 +30,9 @@ export class InquiryStepEvent {
   @Column({ type: "smallint" })
   stepNo!: number;
 
+  @Column({ type: "varchar", length: 80, nullable: true })
+  stepKey!: string | null;
+
   @Column({
     type: "enum",
     enum: InquiryAction,
@@ -45,6 +48,9 @@ export class InquiryStepEvent {
 
   @Column({ type: "varchar", length: 20, default: "customer" })
   createdBy!: string;
+
+  @Column({ type: "uuid", nullable: true })
+  createdByUserId!: string | null;
 
   @CreateDateColumn({ type: "timestamp with time zone" })
   eventAt!: Date;

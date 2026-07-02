@@ -1,0 +1,56 @@
+<mxfile host="app.diagrams.net" modified="2026-07-01T00:00:00.000Z" agent="GitHub Copilot" version="24.7.6" type="device">
+  <diagram id="phucuong-erd" name="Phu Cuong ERD">
+    <mxGraphModel dx="1600" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2200" pageHeight="1600" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="10" value="Product Module&#xa;ProductCategory (PK)&#xa;Product (PK/FK category)&#xa;ProductAttribute&#xa;ProductAttributeOption&#xa;ProductAttributeMapping&#xa;ProductContainerConfig&#xa;ProductCountryConfig&#xa;ProductCertificate&#xa;ProductFaq" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;align=left;spacingLeft=12;spacingTop=12;" vertex="1" parent="1">
+          <mxGeometry x="20" y="20" width="340" height="320" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="20" value="Geography Module&#xa;Country (PK)&#xa;Port (PK/FK country)&#xa;Supports future landing pages per country" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;align=left;spacingLeft=12;spacingTop=12;" vertex="1" parent="1">
+          <mxGeometry x="400" y="20" width="310" height="180" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="30" value="Customer Module&#xa;Customer (PK)&#xa;customer.countryId -> Country&#xa;email unique, lead tracking fields" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;align=left;spacingLeft=12;spacingTop=12;" vertex="1" parent="1">
+          <mxGeometry x="400" y="230" width="310" height="170" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="40" value="Inquiry Core&#xa;Inquiry (PK)&#xa;customerId, productId&#xa;destinationCountryId, destinationPortId&#xa;formStatus, salesStatus, currentStep&#xa;InquiryProduct&#xa;InquiryProductAttribute&#xa;InquiryCommercial&#xa;InquiryRequirement&#xa;InquiryCertificate&#xa;InquiryActivity" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=13;align=left;spacingLeft=12;spacingTop=12;" vertex="1" parent="1">
+          <mxGeometry x="760" y="20" width="390" height="420" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="50" value="Email / Notification&#xa;EmailLog&#xa;Notification&#xa;Supports step emails + submit confirmation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;align=left;spacingLeft=12;spacingTop=12;" vertex="1" parent="1">
+          <mxGeometry x="1180" y="20" width="300" height="180" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="60" value="Content / SEO (planned)&#xa;LandingPage&#xa;Blog&#xa;FAQ&#xa;Country-specific SEO pages" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;align=left;spacingLeft=12;spacingTop=12;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="1180" y="230" width="300" height="170" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="101" style="endArrow=block;html=1;rounded=0;strokeWidth=2;strokeColor=#6c8ebf;" edge="1" parent="1" source="10" target="20">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="102" style="endArrow=block;html=1;rounded=0;strokeWidth=2;strokeColor=#6c8ebf;" edge="1" parent="1" source="10" target="40">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="103" style="endArrow=block;html=1;rounded=0;strokeWidth=2;strokeColor=#82b366;" edge="1" parent="1" source="20" target="30">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="104" style="endArrow=block;html=1;rounded=0;strokeWidth=2;strokeColor=#82b366;" edge="1" parent="1" source="20" target="40">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="105" style="endArrow=block;html=1;rounded=0;strokeWidth=2;strokeColor=#b85450;" edge="1" parent="1" source="30" target="40">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="106" style="endArrow=block;html=1;rounded=0;strokeWidth=2;strokeColor=#d6b656;" edge="1" parent="1" source="40" target="50">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="107" style="endArrow=block;html=1;rounded=0;strokeWidth=2;strokeColor=#b85450;" edge="1" parent="1" source="40" target="60">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
