@@ -13,8 +13,10 @@ import {
   ProductContainerConfigSummaryDto,
   ProductDetailDto,
   ProductListResponseDto,
+  ProductListItemDto,
   ProductSummaryDto,
   ProductTradeTermSummaryDto,
+  ProductCategorySummaryDto,
 } from "./dto/product-response.dto";
 import {
   ProductAttribute,
@@ -142,6 +144,20 @@ export class ProductsService {
     };
   }
 
+  private toCategoryDto(
+    category: ProductCategory | null | undefined,
+  ): ProductCategorySummaryDto | null {
+    if (!category) {
+      return null;
+    }
+
+    return {
+      id: category.id,
+      name: category.name,
+      slug: category.slug,
+    };
+  }
+
   private toAttributeMappingDto(
     mapping: ProductAttributeMapping,
   ): ProductAttributeMappingSummaryDto {
@@ -187,6 +203,24 @@ export class ProductsService {
   private toDetailDto(product: Product): ProductDetailDto {
     return {
       ...this.toSummaryDto(product),
+      attributeMappings: (product.attributeMappings ?? [])
+        .slice()
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((mapping) => this.toAttributeMappingDto(mapping)),
+      containerConfigs: (product.containerConfigs ?? [])
+        .slice()
+        .map((config) => this.toContainerConfigDto(config)),
+      tradeTerms: (product.tradeTerms ?? [])
+        .slice()
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((tradeTerm) => this.toTradeTermDto(tradeTerm)),
+    };
+  }
+
+  private toListItemDto(product: Product): ProductListItemDto {
+    return {
+      ...this.toSummaryDto(product),
+      productCategory: this.toCategoryDto(product.productCategory),
       attributeMappings: (product.attributeMappings ?? [])
         .slice()
         .sort((a, b) => a.sortOrder - b.sortOrder)
@@ -664,6 +698,13 @@ export class ProductsService {
 
     const qb = this.productsRepository
       .createQueryBuilder("product")
+      .leftJoinAndSelect("product.productCategory", "productCategory")
+      .leftJoinAndSelect("product.attributeMappings", "attributeMappings")
+      .leftJoinAndSelect("attributeMappings.attribute", "attribute")
+      .leftJoinAndSelect("attributeMappings.defaultOption", "defaultOption")
+      .leftJoinAndSelect("product.containerConfigs", "containerConfigs")
+      .leftJoinAndSelect("product.tradeTerms", "productTradeTerms")
+      .leftJoinAndSelect("productTradeTerms.tradeTerm", "tradeTerm")
       .orderBy("product.createdAt", "DESC")
       .skip((page - 1) * limit)
       .take(limit);
@@ -686,7 +727,7 @@ export class ProductsService {
     const [products, total] = await qb.getManyAndCount();
 
     return {
-      items: products.map((product) => this.toSummaryDto(product)),
+      items: products.map((product) => this.toListItemDto(product)),
       total,
       page,
       limit,

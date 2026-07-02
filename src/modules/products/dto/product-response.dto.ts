@@ -1,6 +1,17 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { ProductStatus } from "../entities/product.entity";
 
+export class ProductCategorySummaryDto {
+  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
+  id!: string;
+
+  @ApiProperty({ example: "Coconut Products" })
+  name!: string;
+
+  @ApiProperty({ example: "coconut-products" })
+  slug!: string;
+}
+
 export class ProductAttributeMappingSummaryDto {
   @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
   id!: string;
@@ -145,6 +156,20 @@ export class ProductSummaryDto {
   updatedAt!: Date;
 }
 
+export class ProductListItemDto extends ProductSummaryDto {
+  @ApiPropertyOptional({ type: ProductCategorySummaryDto })
+  productCategory!: ProductCategorySummaryDto | null;
+
+  @ApiProperty({ type: [ProductAttributeMappingSummaryDto] })
+  attributeMappings!: ProductAttributeMappingSummaryDto[];
+
+  @ApiProperty({ type: [ProductContainerConfigSummaryDto] })
+  containerConfigs!: ProductContainerConfigSummaryDto[];
+
+  @ApiProperty({ type: [ProductTradeTermSummaryDto] })
+  tradeTerms!: ProductTradeTermSummaryDto[];
+}
+
 export class ProductDetailDto extends ProductSummaryDto {
   @ApiProperty({ type: [ProductAttributeMappingSummaryDto] })
   attributeMappings!: ProductAttributeMappingSummaryDto[];
@@ -157,8 +182,8 @@ export class ProductDetailDto extends ProductSummaryDto {
 }
 
 export class ProductListResponseDto {
-  @ApiProperty({ type: [ProductSummaryDto] })
-  items!: ProductSummaryDto[];
+  @ApiProperty({ type: [ProductListItemDto] })
+  items!: ProductListItemDto[];
 
   @ApiProperty({ example: 24 })
   total!: number;

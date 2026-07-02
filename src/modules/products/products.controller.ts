@@ -42,7 +42,12 @@ export class ProductsController {
 
   @Get()
   @ApiOperation({ summary: "Get product list for staff" })
-  @ApiResponse({ status: 200, type: ProductListResponseDto })
+  @ApiResponse({
+    status: 200,
+    type: ProductListResponseDto,
+    description:
+      "Returns paginated products with full relations: category, attributeMappings, containerConfigs, and tradeTerms.",
+  })
   list(@Query() query: ProductListQueryDto): Promise<ProductListResponseDto> {
     return this.productsService.listForStaff(query);
   }
