@@ -11,7 +11,10 @@ import { ProductCountryConfig } from "./entities/product-country-config.entity";
 import { ProductTradeTerm } from "./entities/product-trade-term.entity";
 import { TradeTerm } from "./entities/trade-term.entity";
 import { Country } from "../geography/entities/country.entity";
-import { ProductsController } from "./products.controller";
+import {
+  ProductsController,
+  PublicProductsController,
+} from "./products.controller";
 import { ProductsService } from "./products.service";
 
 @Module({
@@ -30,7 +33,7 @@ import { ProductsService } from "./products.service";
     ]),
     UsersModule,
   ],
-  controllers: [ProductsController],
+  controllers: [ProductsController, PublicProductsController],
   providers: [ProductsService],
 })
 export class ProductsModule {}

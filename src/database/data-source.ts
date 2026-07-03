@@ -32,6 +32,7 @@ import { TradeTerm } from "../modules/products/entities/trade-term.entity";
 import { RefreshToken } from "../modules/auth/entities/refresh-token.entity";
 import { Role } from "../modules/users/entities/role.entity";
 import { User } from "../modules/users/entities/user.entity";
+import { Blog } from "../modules/blogs/entities/blog.entity";
 
 export default new DataSource({
   type: "postgres",
@@ -73,6 +74,7 @@ export default new DataSource({
     EmailOutbox,
     EmailLog,
     Notification,
+    Blog,
   ],
   migrations: ["src/database/migrations/*.ts"],
   synchronize: true,

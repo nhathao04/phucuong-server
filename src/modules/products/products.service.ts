@@ -1036,4 +1036,65 @@ export class ProductsService {
       throw error;
     }
   }
+
+  // ─────────────────────── Public endpoints ───────────────────────
+
+  async listPublic(
+    query: ProductListQueryDto,
+  ): Promise<ProductListResponseDto> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const search = query.search?.trim();
+
+    const qb = this.productsRepository
+      .createQueryBuilder("product")
+      .leftJoinAndSelect("product.productCategory", "productCategory")
+      .leftJoinAndSelect("product.countryConfigs", "countryConfigs")
+      .leftJoinAndSelect("countryConfigs.country", "country")
+      .leftJoinAndSelect("product.attributeMappings", "attributeMappings")
+      .leftJoinAndSelect("attributeMappings.attribute", "attribute")
+      .leftJoinAndSelect("attributeMappings.defaultOption", "defaultOption")
+      .leftJoinAndSelect("product.containerConfigs", "containerConfigs")
+      .leftJoinAndSelect("product.tradeTerms", "productTradeTerms")
+      .leftJoinAndSelect("productTradeTerms.tradeTerm", "tradeTerm")
+      .where("product.status = :status", { status: ProductStatus.PUBLISHED })
+      .andWhere("product.isActive = true")
+      .orderBy("product.sortOrder", "ASC")
+      .addOrderBy("product.createdAt", "DESC")
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    if (search) {
+      qb.andWhere(
+        "(product.name ILIKE :search OR product.slug ILIKE :search OR product.description ILIKE :search)",
+        { search: `%${search}%` },
+      );
+    }
+
+    const [products, total] = await qb.getManyAndCount();
+
+    return {
+      items: products.map((product) => this.toListItemDto(product)),
+      total,
+      page,
+      limit,
+      totalPages: total === 0 ? 0 : Math.ceil(total / limit),
+    };
+  }
+
+  async getPublicDetail(identifier: string): Promise<ProductDetailDto> {
+    const product = await this.productsRepository.findOne({
+      where: [
+        { id: identifier, status: ProductStatus.PUBLISHED, isActive: true },
+        { slug: identifier, status: ProductStatus.PUBLISHED, isActive: true },
+      ],
+    });
+
+    if (!product) {
+      throw new NotFoundException("Product not found");
+    }
+
+    const detailProduct = await this.loadProductForDetail(product.id);
+    return this.toDetailDto(detailProduct);
+  }
 }

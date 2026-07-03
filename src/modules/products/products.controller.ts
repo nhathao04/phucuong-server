@@ -32,6 +32,7 @@ import {
   ProductListResponseDto,
 } from "./dto/product-response.dto";
 import { ProductsService } from "./products.service";
+import { ProductListQueryDto as PublicProductListQueryDto } from "./dto/product-list-query.dto";
 
 @ApiTags("staff-products")
 @ApiBearerAuth()
@@ -107,5 +108,45 @@ export class ProductsController {
     @Body() updateProductDto: UpdateProductDto,
   ): Promise<ProductDetailDto> {
     return this.productsService.updateStaffProduct(id, updateProductDto);
+  }
+}
+
+// ─────────────────────── Public ───────────────────────
+
+@ApiTags("public-products")
+@Controller("products")
+export class PublicProductsController {
+  constructor(private readonly productsService: ProductsService) {}
+
+  @Get()
+  @ApiOperation({
+    summary: "List published products (public)",
+    description:
+      "Returns only published and active products. Supports search, pagination.",
+  })
+  @ApiResponse({
+    status: 200,
+    type: ProductListResponseDto,
+    description: "Paginated list of published products with full relations.",
+  })
+  list(
+    @Query() query: PublicProductListQueryDto,
+  ): Promise<ProductListResponseDto> {
+    return this.productsService.listPublic(query);
+  }
+
+  @Get(":identifier")
+  @ApiOperation({
+    summary: "Get published product detail (public)",
+    description: "Accepts product UUID or slug.",
+  })
+  @ApiParam({
+    name: "identifier",
+    description: "Product UUID or slug",
+    example: "whole-dried-coconut",
+  })
+  @ApiResponse({ status: 200, type: ProductDetailDto })
+  detail(@Param("identifier") identifier: string): Promise<ProductDetailDto> {
+    return this.productsService.getPublicDetail(identifier);
   }
 }

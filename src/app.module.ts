@@ -6,6 +6,7 @@ import { AppService } from "./app.service";
 import { DatabaseModule } from "./database/database.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { ProductsModule } from "./modules/products/products.module";
+import { BlogsModule } from "./modules/blogs/blogs.module";
 import { UsersModule } from "./modules/users/users.module";
 import { typeOrmModuleAsyncOptions } from "./database/typeorm.config";
 
@@ -20,6 +21,7 @@ import { typeOrmModuleAsyncOptions } from "./database/typeorm.config";
     UsersModule,
     AuthModule,
     ProductsModule,
+    BlogsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
