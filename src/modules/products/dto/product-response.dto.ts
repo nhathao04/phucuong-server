@@ -12,6 +12,51 @@ export class ProductCategorySummaryDto {
   slug!: string;
 }
 
+export class ProductCountrySummaryDto {
+  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440010" })
+  id!: string;
+
+  @ApiProperty({ example: "VN" })
+  code!: string;
+
+  @ApiProperty({ example: "Vietnam" })
+  name!: string;
+}
+
+export class ProductCountryConfigSummaryDto {
+  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440020" })
+  id!: string;
+
+  @ApiProperty({ type: ProductCountrySummaryDto })
+  country!: ProductCountrySummaryDto;
+
+  @ApiPropertyOptional({ example: "20" })
+  moqMt!: string | null;
+
+  @ApiPropertyOptional({ example: "1 container" })
+  moqLabel!: string | null;
+
+  @ApiPropertyOptional({ example: 14 })
+  leadTimeDays!: number | null;
+
+  @ApiPropertyOptional({ example: "Organic Cashew Nuts for Vietnam" })
+  seoTitle!: string | null;
+
+  @ApiPropertyOptional({
+    example: "Premium cashew nuts tailored for the Vietnam market.",
+  })
+  metaDescription!: string | null;
+
+  @ApiPropertyOptional({ example: "viet-nam/cashew-nuts" })
+  landingSlug!: string | null;
+
+  @ApiProperty({ example: true })
+  isActive!: boolean;
+
+  @ApiProperty({ example: 0 })
+  sortOrder!: number;
+}
+
 export class ProductAttributeMappingSummaryDto {
   @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
   id!: string;
@@ -160,6 +205,9 @@ export class ProductListItemDto extends ProductSummaryDto {
   @ApiPropertyOptional({ type: ProductCategorySummaryDto })
   productCategory!: ProductCategorySummaryDto | null;
 
+  @ApiProperty({ type: [ProductCountryConfigSummaryDto] })
+  countryConfigs!: ProductCountryConfigSummaryDto[];
+
   @ApiProperty({ type: [ProductAttributeMappingSummaryDto] })
   attributeMappings!: ProductAttributeMappingSummaryDto[];
 
@@ -171,6 +219,9 @@ export class ProductListItemDto extends ProductSummaryDto {
 }
 
 export class ProductDetailDto extends ProductSummaryDto {
+  @ApiProperty({ type: [ProductCountryConfigSummaryDto] })
+  countryConfigs!: ProductCountryConfigSummaryDto[];
+
   @ApiProperty({ type: [ProductAttributeMappingSummaryDto] })
   attributeMappings!: ProductAttributeMappingSummaryDto[];
 

@@ -6,12 +6,14 @@ import {
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, QueryFailedError, Repository, EntityManager } from "typeorm";
-import { CreateProductDto, UpdateProductDto } from "./dto/create-product.dto";
+import { CreateProductDto, UpdateProductDto } from "./dto/product-request.dto";
 import { ProductListQueryDto } from "./dto/product-list-query.dto";
 import {
   ProductAttributeMappingSummaryDto,
   ProductContainerConfigSummaryDto,
   ProductDetailDto,
+  ProductCountryConfigSummaryDto,
+  ProductCountrySummaryDto,
   ProductListResponseDto,
   ProductListItemDto,
   ProductSummaryDto,
@@ -29,6 +31,45 @@ import { Product, ProductStatus } from "./entities/product.entity";
 import { ProductTradeTerm } from "./entities/product-trade-term.entity";
 import { TradeTerm } from "./entities/trade-term.entity";
 import { ProductCategory } from "./entities/product-category.entity";
+import { ProductCountryConfig } from "./entities/product-country-config.entity";
+import { Country } from "../geography/entities/country.entity";
+
+type ProductConfigPayload = Partial<CreateProductDto & UpdateProductDto> & {
+  attributeMappings?: Array<{
+    attributeId?: string;
+    attributeCode?: string;
+    defaultOptionId?: string | null;
+    defaultOptionValue?: string | null;
+    required?: boolean;
+    sortOrder?: number;
+    metadata?: Record<string, unknown> | null;
+  }>;
+  containerConfigs?: Array<{
+    containerCode: string;
+    containerName: string;
+    capacityMt: number;
+    isDefault?: boolean;
+    notes?: string | null;
+  }>;
+  countryConfigs?: Array<{
+    countryId?: string;
+    countryCode?: string;
+    moqMt?: string | null;
+    moqLabel?: string | null;
+    leadTimeDays?: number | null;
+    seoTitle?: string | null;
+    metaDescription?: string | null;
+    landingSlug?: string | null;
+    isActive?: boolean;
+    sortOrder?: number;
+  }>;
+  tradeTerms?: Array<{
+    tradeTermId?: number;
+    tradeTermCode?: string;
+    isDefault?: boolean;
+    sortOrder?: number;
+  }>;
+};
 
 @Injectable()
 export class ProductsService {
@@ -37,6 +78,8 @@ export class ProductsService {
     private readonly productsRepository: Repository<Product>,
     @InjectRepository(ProductCategory)
     private readonly productCategoriesRepository: Repository<ProductCategory>,
+    @InjectRepository(Country)
+    private readonly countriesRepository: Repository<Country>,
   ) {}
 
   private normalizeText(value?: string | null): string | null {
@@ -158,6 +201,20 @@ export class ProductsService {
     };
   }
 
+  private toCountryDto(
+    country: Country | null | undefined,
+  ): ProductCountrySummaryDto | null {
+    if (!country) {
+      return null;
+    }
+
+    return {
+      id: country.id,
+      code: country.code,
+      name: country.name,
+    };
+  }
+
   private toAttributeMappingDto(
     mapping: ProductAttributeMapping,
   ): ProductAttributeMappingSummaryDto {
@@ -187,6 +244,27 @@ export class ProductsService {
     };
   }
 
+  private toCountryConfigDto(
+    config: ProductCountryConfig,
+  ): ProductCountryConfigSummaryDto {
+    return {
+      id: config.id,
+      country: this.toCountryDto(config.country) ?? {
+        id: config.countryId,
+        code: "",
+        name: "",
+      },
+      moqMt: config.moqMt,
+      moqLabel: config.moqLabel,
+      leadTimeDays: config.leadTimeDays,
+      seoTitle: config.seoTitle,
+      metaDescription: config.metaDescription,
+      landingSlug: config.landingSlug,
+      isActive: config.isActive,
+      sortOrder: config.sortOrder,
+    };
+  }
+
   private toTradeTermDto(
     productTradeTerm: ProductTradeTerm,
   ): ProductTradeTermSummaryDto {
@@ -203,6 +281,10 @@ export class ProductsService {
   private toDetailDto(product: Product): ProductDetailDto {
     return {
       ...this.toSummaryDto(product),
+      countryConfigs: (product.countryConfigs ?? [])
+        .slice()
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((config) => this.toCountryConfigDto(config)),
       attributeMappings: (product.attributeMappings ?? [])
         .slice()
         .sort((a, b) => a.sortOrder - b.sortOrder)
@@ -221,6 +303,10 @@ export class ProductsService {
     return {
       ...this.toSummaryDto(product),
       productCategory: this.toCategoryDto(product.productCategory),
+      countryConfigs: (product.countryConfigs ?? [])
+        .slice()
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((config) => this.toCountryConfigDto(config)),
       attributeMappings: (product.attributeMappings ?? [])
         .slice()
         .sort((a, b) => a.sortOrder - b.sortOrder)
@@ -246,6 +332,8 @@ export class ProductsService {
     const product = await productRepository.findOne({
       where: { id: productId },
       relations: {
+        productCategory: true,
+        countryConfigs: { country: true },
         attributeMappings: { attribute: true, defaultOption: true },
         containerConfigs: true,
         tradeTerms: { tradeTerm: true },
@@ -364,12 +452,50 @@ export class ProductsService {
     };
   }
 
+  private async resolveCountryConfigCountryId(countryInput: {
+    countryId?: string;
+    countryCode?: string;
+  }): Promise<string> {
+    if (countryInput.countryId) {
+      const country = await this.countriesRepository.findOne({
+        where: { id: countryInput.countryId, isActive: true },
+      });
+
+      if (!country) {
+        throw new BadRequestException(
+          `Country not found for id: ${countryInput.countryId}`,
+        );
+      }
+
+      return country.id;
+    }
+
+    if (countryInput.countryCode) {
+      const code = countryInput.countryCode.trim().toUpperCase();
+      const country = await this.countriesRepository.findOne({
+        where: { code, isActive: true },
+      });
+
+      if (!country) {
+        throw new BadRequestException(`Country not found for code: ${code}`);
+      }
+
+      return country.id;
+    }
+
+    throw new BadRequestException(
+      "Each country config item must include countryId or countryCode",
+    );
+  }
+
   private async syncAttributeMappings(
     manager: EntityManager,
     productId: string,
     input: CreateProductDto | UpdateProductDto,
   ): Promise<void> {
-    if (!input.attributeMappings) {
+    const configInput = input as ProductConfigPayload;
+
+    if (!configInput.attributeMappings) {
       return;
     }
 
@@ -381,22 +507,34 @@ export class ProductsService {
 
     await attributeMappingRepository.delete({ productId });
 
-    if (input.attributeMappings.length === 0) {
+    if (configInput.attributeMappings.length === 0) {
       return;
     }
 
     const attributeIds = [
       ...new Set(
-        input.attributeMappings
-          .map((item) => item.attributeId)
+        configInput.attributeMappings
+          .map(
+            (
+              item: NonNullable<
+                ProductConfigPayload["attributeMappings"]
+              >[number],
+            ) => item.attributeId,
+          )
           .filter((value): value is string => typeof value === "string"),
       ),
     ];
 
     const attributeCodes = [
       ...new Set(
-        input.attributeMappings
-          .map((item) => item.attributeCode?.trim().toLowerCase())
+        configInput.attributeMappings
+          .map(
+            (
+              item: NonNullable<
+                ProductConfigPayload["attributeMappings"]
+              >[number],
+            ) => item.attributeCode?.trim().toLowerCase(),
+          )
           .filter((value): value is string => Boolean(value)),
       ),
     ];
@@ -429,11 +567,11 @@ export class ProductsService {
     }
 
     const resolvedMappings: Array<{
-      input: (typeof input.attributeMappings)[number];
+      input: NonNullable<ProductConfigPayload["attributeMappings"]>[number];
       attributeId: string;
     }> = [];
 
-    for (const mappingInput of input.attributeMappings) {
+    for (const mappingInput of configInput.attributeMappings) {
       const resolvedById = mappingInput.attributeId
         ? attributesById.get(mappingInput.attributeId)
         : undefined;
@@ -565,7 +703,9 @@ export class ProductsService {
     productId: string,
     input: CreateProductDto | UpdateProductDto,
   ): Promise<void> {
-    if (!input.containerConfigs) {
+    const configInput = input as ProductConfigPayload;
+
+    if (!configInput.containerConfigs) {
       return;
     }
 
@@ -574,22 +714,88 @@ export class ProductsService {
     );
     await containerConfigRepository.delete({ productId });
 
-    if (input.containerConfigs.length === 0) {
+    if (configInput.containerConfigs.length === 0) {
       return;
     }
 
-    const configs = input.containerConfigs.map((configInput) =>
-      containerConfigRepository.create({
-        productId,
-        containerCode: configInput.containerCode,
-        containerName: configInput.containerName,
-        capacityMt: configInput.capacityMt.toFixed(2),
-        isDefault: configInput.isDefault ?? false,
-        notes: configInput.notes ?? null,
-      }),
+    const configs = configInput.containerConfigs.map(
+      (
+        configInput: NonNullable<
+          ProductConfigPayload["containerConfigs"]
+        >[number],
+      ) =>
+        containerConfigRepository.create({
+          productId,
+          containerCode: configInput.containerCode,
+          containerName: configInput.containerName,
+          capacityMt: configInput.capacityMt.toFixed(2),
+          isDefault: configInput.isDefault ?? false,
+          notes: configInput.notes ?? null,
+        }),
     );
 
     await containerConfigRepository.save(configs);
+  }
+
+  private async syncCountryConfigs(
+    manager: EntityManager,
+    productId: string,
+    input: CreateProductDto | UpdateProductDto,
+  ): Promise<void> {
+    const configInput = input as ProductConfigPayload;
+
+    if (!configInput.countryConfigs) {
+      return;
+    }
+
+    const countryConfigRepository = manager.getRepository(ProductCountryConfig);
+    await countryConfigRepository.delete({ productId });
+
+    if (configInput.countryConfigs.length === 0) {
+      return;
+    }
+
+    const resolvedCountryIds: string[] = [];
+    for (const countryConfigInput of configInput.countryConfigs) {
+      const countryId = await this.resolveCountryConfigCountryId({
+        countryId: countryConfigInput.countryId,
+        countryCode: countryConfigInput.countryCode,
+      });
+
+      if (resolvedCountryIds.includes(countryId)) {
+        throw new BadRequestException(
+          "Duplicate country config provided in payload",
+        );
+      }
+
+      resolvedCountryIds.push(countryId);
+    }
+
+    const entries = configInput.countryConfigs.map(
+      (
+        countryConfigInput: NonNullable<
+          ProductConfigPayload["countryConfigs"]
+        >[number],
+        index: number,
+      ) => {
+        const countryId = resolvedCountryIds[index];
+
+        return countryConfigRepository.create({
+          productId,
+          countryId,
+          moqMt: countryConfigInput.moqMt ?? null,
+          moqLabel: countryConfigInput.moqLabel ?? null,
+          leadTimeDays: countryConfigInput.leadTimeDays ?? null,
+          seoTitle: countryConfigInput.seoTitle ?? null,
+          metaDescription: countryConfigInput.metaDescription ?? null,
+          landingSlug: countryConfigInput.landingSlug ?? null,
+          isActive: countryConfigInput.isActive ?? true,
+          sortOrder: countryConfigInput.sortOrder ?? index,
+        });
+      },
+    );
+
+    await countryConfigRepository.save(entries);
   }
 
   private async resolveTradeTermId(
@@ -631,19 +837,21 @@ export class ProductsService {
     productId: string,
     input: CreateProductDto | UpdateProductDto,
   ): Promise<void> {
-    if (!input.tradeTerms) {
+    const configInput = input as ProductConfigPayload;
+
+    if (!configInput.tradeTerms) {
       return;
     }
 
     const productTradeTermRepository = manager.getRepository(ProductTradeTerm);
     await productTradeTermRepository.delete({ productId });
 
-    if (input.tradeTerms.length === 0) {
+    if (configInput.tradeTerms.length === 0) {
       return;
     }
 
     const resolvedTradeTermIds: number[] = [];
-    for (const tradeTermInput of input.tradeTerms) {
+    for (const tradeTermInput of configInput.tradeTerms) {
       const tradeTermId = await this.resolveTradeTermId(
         manager,
         tradeTermInput,
@@ -656,13 +864,17 @@ export class ProductsService {
       resolvedTradeTermIds.push(tradeTermId);
     }
 
-    const entries = input.tradeTerms.map((tradeTermInput, index) =>
-      productTradeTermRepository.create({
-        productId,
-        tradeTermId: resolvedTradeTermIds[index],
-        isDefault: tradeTermInput.isDefault ?? false,
-        sortOrder: tradeTermInput.sortOrder ?? index,
-      }),
+    const entries = configInput.tradeTerms.map(
+      (
+        tradeTermInput: NonNullable<ProductConfigPayload["tradeTerms"]>[number],
+        index: number,
+      ) =>
+        productTradeTermRepository.create({
+          productId,
+          tradeTermId: resolvedTradeTermIds[index],
+          isDefault: tradeTermInput.isDefault ?? false,
+          sortOrder: tradeTermInput.sortOrder ?? index,
+        }),
     );
 
     await productTradeTermRepository.save(entries);
@@ -675,6 +887,7 @@ export class ProductsService {
   ): Promise<void> {
     await this.syncAttributeMappings(manager, productId, input);
     await this.syncContainerConfigs(manager, productId, input);
+    await this.syncCountryConfigs(manager, productId, input);
     await this.syncTradeTerms(manager, productId, input);
   }
 
@@ -699,6 +912,8 @@ export class ProductsService {
     const qb = this.productsRepository
       .createQueryBuilder("product")
       .leftJoinAndSelect("product.productCategory", "productCategory")
+      .leftJoinAndSelect("product.countryConfigs", "countryConfigs")
+      .leftJoinAndSelect("countryConfigs.country", "country")
       .leftJoinAndSelect("product.attributeMappings", "attributeMappings")
       .leftJoinAndSelect("attributeMappings.attribute", "attribute")
       .leftJoinAndSelect("attributeMappings.defaultOption", "defaultOption")

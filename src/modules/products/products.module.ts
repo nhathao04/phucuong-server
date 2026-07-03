@@ -7,8 +7,10 @@ import { ProductAttributeOption } from "./entities/product-attribute-option.enti
 import { Product } from "./entities/product.entity";
 import { ProductCategory } from "./entities/product-category.entity";
 import { ProductContainerConfig } from "./entities/product-container-config.entity";
+import { ProductCountryConfig } from "./entities/product-country-config.entity";
 import { ProductTradeTerm } from "./entities/product-trade-term.entity";
 import { TradeTerm } from "./entities/trade-term.entity";
+import { Country } from "../geography/entities/country.entity";
 import { ProductsController } from "./products.controller";
 import { ProductsService } from "./products.service";
 
@@ -21,8 +23,10 @@ import { ProductsService } from "./products.service";
       ProductAttributeOption,
       ProductAttributeMapping,
       ProductContainerConfig,
+      ProductCountryConfig,
       TradeTerm,
       ProductTradeTerm,
+      Country,
     ]),
     UsersModule,
   ],

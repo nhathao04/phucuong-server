@@ -25,7 +25,7 @@ import {
   UPDATE_PRODUCT_PARTIAL_SWAGGER_EXAMPLE,
   UPDATE_PRODUCT_REPLACE_CONFIGS_SWAGGER_EXAMPLE,
   UpdateProductDto,
-} from "./dto/create-product.dto";
+} from "./dto/product-request.dto";
 import { ProductListQueryDto } from "./dto/product-list-query.dto";
 import {
   ProductDetailDto,

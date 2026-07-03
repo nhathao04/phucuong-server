@@ -700,59 +700,58 @@ export const CREATE_PRODUCT_SWAGGER_EXAMPLE: CreateProductDto = {
   ],
 };
 
-export const UPDATE_PRODUCT_REPLACE_CONFIGS_SWAGGER_EXAMPLE: UpdateProductDto =
-  {
-    seoTitle: "Whole Dried Coconut Export Supplier - Updated",
-    metaDescription: "Updated SEO content for campaign Q3.",
-    sortOrder: 2,
-    isFeatured: true,
-    countryConfigs: [
-      {
-        countryCode: "VN",
-        moqMt: "18",
-        moqLabel: "1 container",
-        leadTimeDays: 12,
-        seoTitle: "Whole Dried Coconut for Vietnam",
-        metaDescription: "Localized landing page for Vietnam market.",
-        landingSlug: "viet-nam/whole-dried-coconut",
-        isActive: true,
-        sortOrder: 1,
-      },
-    ],
-    attributeMappings: [
-      {
-        attributeCode: "coconut_size",
-        defaultOptionValue: "Large",
-        required: true,
-        sortOrder: 1,
-      },
-      {
-        attributeCode: "packaging",
-        defaultOptionValue: "PP Bag",
-        required: false,
-        sortOrder: 2,
-        metadata: { allowCustom: true },
-      },
-    ],
-    containerConfigs: [
-      {
-        containerCode: "20FT",
-        containerName: "20ft Dry Container",
-        capacityMt: 12,
-        isDefault: true,
-      },
-      {
-        containerCode: "40HQ",
-        containerName: "40ft High Cube",
-        capacityMt: 28.5,
-        isDefault: false,
-      },
-    ],
-    tradeTerms: [
-      { tradeTermCode: "FOB", isDefault: true, sortOrder: 1 },
-      { tradeTermCode: "CIF", isDefault: false, sortOrder: 2 },
-    ],
-  };
+export const UPDATE_PRODUCT_REPLACE_CONFIGS_SWAGGER_EXAMPLE: UpdateProductDto = {
+  seoTitle: "Whole Dried Coconut Export Supplier - Updated",
+  metaDescription: "Updated SEO content for campaign Q3.",
+  sortOrder: 2,
+  isFeatured: true,
+  countryConfigs: [
+    {
+      countryCode: "VN",
+      moqMt: "18",
+      moqLabel: "1 container",
+      leadTimeDays: 12,
+      seoTitle: "Whole Dried Coconut for Vietnam",
+      metaDescription: "Localized landing page for Vietnam market.",
+      landingSlug: "viet-nam/whole-dried-coconut",
+      isActive: true,
+      sortOrder: 1,
+    },
+  ],
+  attributeMappings: [
+    {
+      attributeCode: "coconut_size",
+      defaultOptionValue: "Large",
+      required: true,
+      sortOrder: 1,
+    },
+    {
+      attributeCode: "packaging",
+      defaultOptionValue: "PP Bag",
+      required: false,
+      sortOrder: 2,
+      metadata: { allowCustom: true },
+    },
+  ],
+  containerConfigs: [
+    {
+      containerCode: "20FT",
+      containerName: "20ft Dry Container",
+      capacityMt: 12,
+      isDefault: true,
+    },
+    {
+      containerCode: "40HQ",
+      containerName: "40ft High Cube",
+      capacityMt: 28.5,
+      isDefault: false,
+    },
+  ],
+  tradeTerms: [
+    { tradeTermCode: "FOB", isDefault: true, sortOrder: 1 },
+    { tradeTermCode: "CIF", isDefault: false, sortOrder: 2 },
+  ],
+};
 
 export const UPDATE_PRODUCT_PARTIAL_SWAGGER_EXAMPLE: UpdateProductDto = {
   description: "Updated product content only.",
