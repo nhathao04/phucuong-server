@@ -12,8 +12,8 @@ import { Product } from "./product.entity";
 
 @Entity({ name: "product_container_configs" })
 export class ProductContainerConfig {
-  @PrimaryGeneratedColumn("uuid")
-  id!: string;
+  @PrimaryGeneratedColumn("increment", { type: "int" })
+  id!: number;
 
   @Index()
   @Column({ type: "uuid" })

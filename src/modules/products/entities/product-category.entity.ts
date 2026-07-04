@@ -11,8 +11,8 @@ import { Product } from "./product.entity";
 
 @Entity({ name: "product_categories" })
 export class ProductCategory {
-  @PrimaryGeneratedColumn("uuid")
-  id!: string;
+  @PrimaryGeneratedColumn("increment", { type: "int" })
+  id!: number;
 
   @Column({ type: "varchar", length: 180 })
   name!: string;

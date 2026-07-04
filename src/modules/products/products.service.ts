@@ -6,21 +6,41 @@ import {
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, QueryFailedError, Repository, EntityManager } from "typeorm";
-import { CreateProductDto, UpdateProductDto } from "./dto/product-request.dto";
+import {
+  CreateProductDto,
+  ProductImageRefDto,
+  ProductPackagingOptionInputDto,
+  ProductQuoteConfigInputDto,
+  ProductTargetBuyerInputDto,
+  ProductTechnicalSpecificationInputDto,
+  ProductWhyChooseUsInputDto,
+  UpdateProductDto,
+} from "./dto/product-request.dto";
 import { ProductListQueryDto } from "./dto/product-list-query.dto";
 import {
+  AssetSummaryDto,
+} from "../media/dto/asset.dto";
+import {
   ProductAttributeMappingSummaryDto,
+  ProductCertificateSummaryDto,
   ProductContainerConfigSummaryDto,
-  ProductDetailDto,
   ProductCountryConfigSummaryDto,
   ProductCountrySummaryDto,
-  ProductListResponseDto,
+  ProductDetailDto,
+  ProductFaqSummaryDto,
+  ProductHeroDto,
+  ProductHeroStatDto,
   ProductListItemDto,
+  ProductListResponseDto,
+  ProductPackagingOptionDto,
+  ProductQuoteConfigDto,
+  ProductQuoteConfigFieldDto,
   ProductSummaryDto,
+  ProductTargetBuyerDto,
+  ProductTechnicalSpecificationDto,
   ProductTradeTermSummaryDto,
   ProductCategorySummaryDto,
-  ProductFaqSummaryDto,
-  ProductCertificateSummaryDto,
+  ProductWhyChooseUsDto,
 } from "./dto/product-response.dto";
 import {
   ProductAttribute,
@@ -29,20 +49,29 @@ import {
 import { ProductAttributeMapping } from "./entities/product-attribute-mapping.entity";
 import { ProductAttributeOption } from "./entities/product-attribute-option.entity";
 import { ProductContainerConfig } from "./entities/product-container-config.entity";
-import { Product, ProductStatus } from "./entities/product.entity";
+import { ProductImage } from "./entities/product-image.entity";
+import {
+  Product,
+  ProductStatus,
+} from "./entities/product.entity";
 import { ProductFaq } from "./entities/product-faq.entity";
 import { ProductCertificate } from "./entities/product-certificate.entity";
 import { ProductTradeTerm } from "./entities/product-trade-term.entity";
 import { TradeTerm } from "./entities/trade-term.entity";
 import { ProductCategory } from "./entities/product-category.entity";
 import { ProductCountryConfig } from "./entities/product-country-config.entity";
+import { ProductTechnicalSpecification } from "./entities/product-technical-specification.entity";
+import { ProductPackagingOption } from "./entities/product-packaging-option.entity";
+import { ProductTargetBuyer } from "./entities/product-target-buyer.entity";
+import { ProductWhyChooseUs } from "./entities/product-why-choose-us.entity";
 import { Country } from "../geography/entities/country.entity";
+import { Asset } from "../media/entities/asset.entity";
 
 type ProductConfigPayload = Partial<CreateProductDto & UpdateProductDto> & {
   attributeMappings?: Array<{
-    attributeId?: string;
+    attributeId?: number;
     attributeCode?: string;
-    defaultOptionId?: string | null;
+    defaultOptionId?: number | null;
     defaultOptionValue?: string | null;
     required?: boolean;
     sortOrder?: number;
@@ -73,6 +102,35 @@ type ProductConfigPayload = Partial<CreateProductDto & UpdateProductDto> & {
     isDefault?: boolean;
     sortOrder?: number;
   }>;
+  images?: ProductImageRefDto[];
+  technicalSpecifications?: ProductTechnicalSpecificationInputDto[];
+  packagingOptions?: ProductPackagingOptionInputDto[];
+  targetBuyers?: ProductTargetBuyerInputDto[];
+  whyChooseUs?: ProductWhyChooseUsInputDto[];
+  badges?: string[];
+  hero?: ProductQuoteConfigInputDto extends never
+    ? never
+    : {
+        eyebrow?: string | null;
+        title?: string | null;
+        subtitle?: string | null;
+        stats?: Array<{ value: string; label: string }>;
+      } | null;
+  quoteConfig?: ProductQuoteConfigInputDto | null;
+};
+
+const toAssetSummary = (asset: Asset | null | undefined): AssetSummaryDto | null => {
+  if (!asset) return null;
+  return {
+    id: asset.id,
+    url: asset.url,
+    thumbnailUrl: asset.thumbnailUrl,
+    alt: asset.alt,
+    caption: asset.caption,
+    width: asset.width,
+    height: asset.height,
+    sortOrder: asset.sortOrder,
+  };
 };
 
 @Injectable()
@@ -102,96 +160,6 @@ export class ProductsService {
           : segment,
       )
       .join(" ");
-  }
-
-  private async resolveProductCategoryId(
-    input: Pick<
-      CreateProductDto | UpdateProductDto,
-      "productCategoryId" | "productCategorySlug" | "productCategoryName"
-    >,
-  ): Promise<string | null | undefined> {
-    const categorySlug = this.normalizeText(input.productCategorySlug);
-    if (categorySlug) {
-      const category = await this.productCategoriesRepository.findOne({
-        where: { slug: categorySlug },
-      });
-
-      if (!category) {
-        throw new NotFoundException(
-          `Product category not found for slug: ${categorySlug}`,
-        );
-      }
-
-      return category.id;
-    }
-
-    const categoryName = this.normalizeText(input.productCategoryName);
-    if (categoryName) {
-      const categories = await this.productCategoriesRepository
-        .createQueryBuilder("category")
-        .where("LOWER(category.name) = LOWER(:name)", { name: categoryName })
-        .orderBy("category.createdAt", "ASC")
-        .getMany();
-
-      if (categories.length === 0) {
-        throw new NotFoundException(
-          `Product category not found for name: ${categoryName}`,
-        );
-      }
-
-      if (categories.length > 1) {
-        throw new ConflictException(
-          `Multiple product categories match name: ${categoryName}. Use productCategorySlug or productCategoryId instead.`,
-        );
-      }
-
-      return categories[0].id;
-    }
-
-    if (
-      input.productCategoryId !== undefined &&
-      input.productCategoryId !== null
-    ) {
-      const categoryById = await this.productCategoriesRepository.findOne({
-        where: { id: input.productCategoryId },
-      });
-
-      if (categoryById) {
-        return categoryById.id;
-      }
-    }
-
-    return undefined;
-  }
-
-  private toSummaryDto(product: Product): ProductSummaryDto {
-    return {
-      id: product.id,
-      name: product.name,
-      slug: product.slug,
-      productCode: product.productCode,
-      productCategoryId: product.productCategoryId,
-      seoTitle: product.seoTitle,
-      metaDescription: product.metaDescription,
-      focusKeyword: product.focusKeyword,
-      description: product.description,
-      shortDescription: product.shortDescription,
-      thumbnailUrl: product.thumbnailUrl,
-      imageUrl: product.imageUrl,
-      hsCode: product.hsCode,
-      origin: product.origin,
-      exportPort: product.exportPort,
-      shelfLife: product.shelfLife,
-      storageCondition: product.storageCondition,
-      sampleAvailable: product.sampleAvailable,
-      labReportAvailable: product.labReportAvailable,
-      status: product.status,
-      sortOrder: product.sortOrder,
-      isFeatured: product.isFeatured,
-      isActive: product.isActive,
-      createdAt: product.createdAt,
-      updatedAt: product.updatedAt,
-    };
   }
 
   private toCategoryDto(
@@ -305,9 +273,153 @@ export class ProductsService {
     };
   }
 
+  private toImageDto(image: ProductImage): AssetSummaryDto | null {
+    return toAssetSummary(image.asset);
+  }
+
+  private toImages(product: Product): AssetSummaryDto[] {
+    if (!product.images) return [];
+    return [...product.images]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((image) => this.toImageDto(image))
+      .filter((asset): asset is AssetSummaryDto => Boolean(asset));
+  }
+
+  private toHero(product: Product): ProductHeroDto | null {
+    if (!product.hero) return null;
+    const hero = product.hero;
+    return {
+      eyebrow: hero.eyebrow ?? null,
+      title: hero.title ?? null,
+      subtitle: hero.subtitle ?? null,
+      stats: Array.isArray(hero.stats)
+        ? hero.stats.map<ProductHeroStatDto>((stat) => ({
+            value: String(stat?.value ?? ""),
+            label: String(stat?.label ?? ""),
+          }))
+        : [],
+    };
+  }
+
+  private toTechnicalSpecifications(
+    product: Product,
+  ): ProductTechnicalSpecificationDto[] {
+    if (!product.technicalSpecifications) return [];
+    return [...product.technicalSpecifications]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map<ProductTechnicalSpecificationDto>((spec) => ({
+        label: spec.label,
+        value: spec.value,
+        unit: spec.unit,
+      }));
+  }
+
+  private toPackagingOptions(
+    product: Product,
+  ): ProductPackagingOptionDto[] {
+    if (!product.packagingOptions) return [];
+    return [...product.packagingOptions]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map<ProductPackagingOptionDto>((option) => ({
+        title: option.title,
+        description: option.description,
+        details: Array.isArray(option.details) ? option.details : [],
+      }));
+  }
+
+  private toTargetBuyers(product: Product): ProductTargetBuyerDto[] {
+    if (!product.targetBuyers) return [];
+    return [...product.targetBuyers]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map<ProductTargetBuyerDto>((target) => ({
+        title: target.title,
+        description: target.description,
+      }));
+  }
+
+  private toWhyChooseUs(product: Product): ProductWhyChooseUsDto[] {
+    if (!product.whyChooseUs) return [];
+    return [...product.whyChooseUs]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map<ProductWhyChooseUsDto>((reason) => ({
+        title: reason.title,
+        description: reason.description,
+      }));
+  }
+
+  private toQuoteConfig(product: Product): ProductQuoteConfigDto | null {
+    if (!product.quoteConfig) return null;
+    const quoteConfig = product.quoteConfig;
+    return {
+      moq: quoteConfig.moq ?? null,
+      tradeTerms: Array.isArray(quoteConfig.tradeTerms)
+        ? quoteConfig.tradeTerms
+        : [],
+      fields: Array.isArray(quoteConfig.fields)
+        ? quoteConfig.fields.map<ProductQuoteConfigFieldDto>((field) => ({
+            key: field.key,
+            label: field.label,
+            type: field.type,
+            unit: field.unit ?? null,
+            required: Boolean(field.required),
+            options: Array.isArray(field.options) ? field.options : [],
+          }))
+        : [],
+    };
+  }
+
+  private toSummaryDto(product: Product): ProductSummaryDto {
+    return {
+      id: product.id,
+      name: product.name,
+      slug: product.slug,
+      productCode: product.productCode,
+      productCategoryId: product.productCategoryId,
+      productCategory: this.toCategoryDto(product.productCategory),
+      seoTitle: product.seoTitle,
+      metaDescription: product.metaDescription,
+      focusKeyword: product.focusKeyword,
+      description: product.description,
+      shortDescription: product.shortDescription,
+      thumbnailUrl: product.thumbnailUrl,
+      imageUrl: product.imageUrl,
+      badges: product.badges ?? [],
+      images: this.toImages(product),
+      status: product.status,
+      sortOrder: product.sortOrder,
+      isFeatured: product.isFeatured,
+      hsCode: product.hsCode,
+      origin: product.origin,
+      exportPort: product.exportPort,
+      shelfLife: product.shelfLife,
+      storageCondition: product.storageCondition,
+      sampleAvailable: product.sampleAvailable,
+      labReportAvailable: product.labReportAvailable,
+      isActive: product.isActive,
+      createdAt: product.createdAt,
+      updatedAt: product.updatedAt,
+    };
+  }
+
+  private toListItemDto(product: Product): ProductListItemDto {
+    return {
+      ...this.toSummaryDto(product),
+      countryConfigs: (product.countryConfigs ?? [])
+        .slice()
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((config) => this.toCountryConfigDto(config)),
+    };
+  }
+
   private toDetailDto(product: Product): ProductDetailDto {
     return {
       ...this.toSummaryDto(product),
+      hero: this.toHero(product),
+      technicalSpecifications: this.toTechnicalSpecifications(product),
+      packagingOptions: this.toPackagingOptions(product),
+      targetBuyers: this.toTargetBuyers(product),
+      whyChooseUs: this.toWhyChooseUs(product),
+      quoteConfig: this.toQuoteConfig(product),
       countryConfigs: (product.countryConfigs ?? [])
         .slice()
         .sort((a, b) => a.sortOrder - b.sortOrder)
@@ -334,28 +446,6 @@ export class ProductsService {
     };
   }
 
-  private toListItemDto(product: Product): ProductListItemDto {
-    return {
-      ...this.toSummaryDto(product),
-      productCategory: this.toCategoryDto(product.productCategory),
-      countryConfigs: (product.countryConfigs ?? [])
-        .slice()
-        .sort((a, b) => a.sortOrder - b.sortOrder)
-        .map((config) => this.toCountryConfigDto(config)),
-      attributeMappings: (product.attributeMappings ?? [])
-        .slice()
-        .sort((a, b) => a.sortOrder - b.sortOrder)
-        .map((mapping) => this.toAttributeMappingDto(mapping)),
-      containerConfigs: (product.containerConfigs ?? [])
-        .slice()
-        .map((config) => this.toContainerConfigDto(config)),
-      tradeTerms: (product.tradeTerms ?? [])
-        .slice()
-        .sort((a, b) => a.sortOrder - b.sortOrder)
-        .map((tradeTerm) => this.toTradeTermDto(tradeTerm)),
-    };
-  }
-
   private async loadProductForDetail(
     productId: string,
     manager?: EntityManager,
@@ -374,6 +464,11 @@ export class ProductsService {
         tradeTerms: { tradeTerm: true },
         faqs: true,
         certificates: { certificate: true },
+        images: { asset: true },
+        technicalSpecifications: true,
+        packagingOptions: true,
+        targetBuyers: true,
+        whyChooseUs: true,
       },
     });
 
@@ -402,6 +497,66 @@ export class ProductsService {
     }
 
     return normalizedSlug;
+  }
+
+  private async resolveProductCategoryId(
+    input: Pick<
+      CreateProductDto | UpdateProductDto,
+      "productCategoryId" | "productCategorySlug" | "productCategoryName"
+    >,
+  ): Promise<number | null | undefined> {
+    const categorySlug = this.normalizeText(input.productCategorySlug);
+    if (categorySlug) {
+      const category = await this.productCategoriesRepository.findOne({
+        where: { slug: categorySlug },
+      });
+
+      if (!category) {
+        throw new NotFoundException(
+          `Product category not found for slug: ${categorySlug}`,
+        );
+      }
+
+      return category.id;
+    }
+
+    const categoryName = this.normalizeText(input.productCategoryName);
+    if (categoryName) {
+      const categories = await this.productCategoriesRepository
+        .createQueryBuilder("category")
+        .where("LOWER(category.name) = LOWER(:name)", { name: categoryName })
+        .orderBy("category.createdAt", "ASC")
+        .getMany();
+
+      if (categories.length === 0) {
+        throw new NotFoundException(
+          `Product category not found for name: ${categoryName}`,
+        );
+      }
+
+      if (categories.length > 1) {
+        throw new ConflictException(
+          `Multiple product categories match name: ${categoryName}. Use productCategorySlug or productCategoryId instead.`,
+        );
+      }
+
+      return categories[0].id;
+    }
+
+    if (
+      input.productCategoryId !== undefined &&
+      input.productCategoryId !== null
+    ) {
+      const categoryById = await this.productCategoriesRepository.findOne({
+        where: { id: input.productCategoryId },
+      });
+
+      if (categoryById) {
+        return categoryById.id;
+      }
+    }
+
+    return undefined;
   }
 
   private async buildProductPayload(
@@ -442,6 +597,10 @@ export class ProductsService {
         input.description !== undefined
           ? input.description
           : (existingProduct?.description ?? null),
+      shortDescription:
+        input.shortDescription !== undefined
+          ? input.shortDescription
+          : (existingProduct?.shortDescription ?? null),
       isActive:
         input.isActive !== undefined
           ? input.isActive
@@ -486,6 +645,17 @@ export class ProductsService {
         input.isFeatured !== undefined
           ? input.isFeatured
           : (existingProduct?.isFeatured ?? false),
+      badges:
+        input.badges !== undefined
+          ? (input.badges ?? [])
+          : (existingProduct?.badges ?? []),
+      hero: input.hero !== undefined
+        ? (input.hero ?? null)
+        : existingProduct?.hero ?? null,
+      quoteConfig:
+        input.quoteConfig !== undefined
+          ? (input.quoteConfig ?? null)
+          : (existingProduct?.quoteConfig ?? null),
     };
   }
 
@@ -558,7 +728,7 @@ export class ProductsService {
               >[number],
             ) => item.attributeId,
           )
-          .filter((value): value is string => typeof value === "string"),
+          .filter((value): value is number => typeof value === "number"),
       ),
     ];
 
@@ -576,7 +746,7 @@ export class ProductsService {
       ),
     ];
 
-    const attributesById = new Map<string, ProductAttribute>();
+    const attributesById = new Map<number, ProductAttribute>();
     const attributesByCode = new Map<string, ProductAttribute>();
 
     if (attributeIds.length > 0) {
@@ -605,7 +775,7 @@ export class ProductsService {
 
     const resolvedMappings: Array<{
       input: NonNullable<ProductConfigPayload["attributeMappings"]>[number];
-      attributeId: string;
+      attributeId: number;
     }> = [];
 
     for (const mappingInput of configInput.attributeMappings) {
@@ -656,11 +826,11 @@ export class ProductsService {
         resolvedMappings
           .map((item) => item.input)
           .map((item) => item.defaultOptionId)
-          .filter((value): value is string => typeof value === "string"),
+          .filter((value): value is number => typeof value === "number"),
       ),
     ];
 
-    let optionsById = new Map<string, ProductAttributeOption>();
+    let optionsById = new Map<number, ProductAttributeOption>();
     if (defaultOptionIds.length > 0) {
       const options = await optionRepository.find({
         where: { id: In(defaultOptionIds) },
@@ -674,7 +844,7 @@ export class ProductsService {
     }
 
     const resolveOptionByValue = async (
-      attributeId: string,
+      attributeId: number,
       value: string,
     ): Promise<ProductAttributeOption | null> => {
       return optionRepository
@@ -689,7 +859,7 @@ export class ProductsService {
     const mappings: ProductAttributeMapping[] = [];
     for (const resolvedMapping of resolvedMappings) {
       const mappingInput = resolvedMapping.input;
-      let resolvedDefaultOptionId: string | null = null;
+      let resolvedDefaultOptionId: number | null = null;
 
       if (mappingInput.defaultOptionId) {
         const option = optionsById.get(mappingInput.defaultOptionId);
@@ -835,6 +1005,137 @@ export class ProductsService {
     await countryConfigRepository.save(entries);
   }
 
+  private async syncImages(
+    manager: EntityManager,
+    productId: string,
+    input: CreateProductDto | UpdateProductDto,
+  ): Promise<void> {
+    const configInput = input as ProductConfigPayload;
+    if (!configInput.images) return;
+
+    const imageRepository = manager.getRepository(ProductImage);
+    await imageRepository.delete({ productId });
+
+    if (configInput.images.length === 0) return;
+
+    const seen = new Set<string>();
+    const entries: ProductImage[] = [];
+    configInput.images.forEach((ref, index) => {
+      if (!ref.assetId || seen.has(ref.assetId)) return;
+      seen.add(ref.assetId);
+      entries.push(
+        imageRepository.create({
+          productId,
+          assetId: ref.assetId,
+          sortOrder: ref.sortOrder ?? index,
+        }),
+      );
+    });
+
+    if (entries.length > 0) {
+      await imageRepository.save(entries);
+    }
+  }
+
+  private async syncTechnicalSpecifications(
+    manager: EntityManager,
+    productId: string,
+    input: CreateProductDto | UpdateProductDto,
+  ): Promise<void> {
+    const configInput = input as ProductConfigPayload;
+    if (!configInput.technicalSpecifications) return;
+
+    const repository = manager.getRepository(ProductTechnicalSpecification);
+    await repository.delete({ productId });
+
+    if (configInput.technicalSpecifications.length === 0) return;
+
+    const entries = configInput.technicalSpecifications.map(
+      (spec, index) =>
+        repository.create({
+          productId,
+          label: spec.label,
+          value: spec.value,
+          unit: spec.unit ?? null,
+          sortOrder: spec.sortOrder ?? index,
+        }),
+    );
+    await repository.save(entries);
+  }
+
+  private async syncPackagingOptions(
+    manager: EntityManager,
+    productId: string,
+    input: CreateProductDto | UpdateProductDto,
+  ): Promise<void> {
+    const configInput = input as ProductConfigPayload;
+    if (!configInput.packagingOptions) return;
+
+    const repository = manager.getRepository(ProductPackagingOption);
+    await repository.delete({ productId });
+
+    if (configInput.packagingOptions.length === 0) return;
+
+    const entries = configInput.packagingOptions.map((option, index) =>
+      repository.create({
+        productId,
+        title: option.title,
+        description: option.description ?? null,
+        details: option.details ?? [],
+        sortOrder: option.sortOrder ?? index,
+      }),
+    );
+    await repository.save(entries);
+  }
+
+  private async syncTargetBuyers(
+    manager: EntityManager,
+    productId: string,
+    input: CreateProductDto | UpdateProductDto,
+  ): Promise<void> {
+    const configInput = input as ProductConfigPayload;
+    if (!configInput.targetBuyers) return;
+
+    const repository = manager.getRepository(ProductTargetBuyer);
+    await repository.delete({ productId });
+
+    if (configInput.targetBuyers.length === 0) return;
+
+    const entries = configInput.targetBuyers.map((item, index) =>
+      repository.create({
+        productId,
+        title: item.title,
+        description: item.description ?? null,
+        sortOrder: item.sortOrder ?? index,
+      }),
+    );
+    await repository.save(entries);
+  }
+
+  private async syncWhyChooseUs(
+    manager: EntityManager,
+    productId: string,
+    input: CreateProductDto | UpdateProductDto,
+  ): Promise<void> {
+    const configInput = input as ProductConfigPayload;
+    if (!configInput.whyChooseUs) return;
+
+    const repository = manager.getRepository(ProductWhyChooseUs);
+    await repository.delete({ productId });
+
+    if (configInput.whyChooseUs.length === 0) return;
+
+    const entries = configInput.whyChooseUs.map((item, index) =>
+      repository.create({
+        productId,
+        title: item.title,
+        description: item.description ?? null,
+        sortOrder: item.sortOrder ?? index,
+      }),
+    );
+    await repository.save(entries);
+  }
+
   private async resolveTradeTermId(
     manager: EntityManager,
     tradeTermInput: { tradeTermId?: number; tradeTermCode?: string },
@@ -925,6 +1226,11 @@ export class ProductsService {
     await this.syncAttributeMappings(manager, productId, input);
     await this.syncContainerConfigs(manager, productId, input);
     await this.syncCountryConfigs(manager, productId, input);
+    await this.syncImages(manager, productId, input);
+    await this.syncTechnicalSpecifications(manager, productId, input);
+    await this.syncPackagingOptions(manager, productId, input);
+    await this.syncTargetBuyers(manager, productId, input);
+    await this.syncWhyChooseUs(manager, productId, input);
     await this.syncTradeTerms(manager, productId, input);
   }
 
@@ -957,6 +1263,8 @@ export class ProductsService {
       .leftJoinAndSelect("product.containerConfigs", "containerConfigs")
       .leftJoinAndSelect("product.tradeTerms", "productTradeTerms")
       .leftJoinAndSelect("productTradeTerms.tradeTerm", "tradeTerm")
+      .leftJoinAndSelect("product.images", "images")
+      .leftJoinAndSelect("images.asset", "imageAsset")
       .orderBy("product.createdAt", "DESC")
       .skip((page - 1) * limit)
       .take(limit);
@@ -1088,12 +1396,8 @@ export class ProductsService {
       .leftJoinAndSelect("product.productCategory", "productCategory")
       .leftJoinAndSelect("product.countryConfigs", "countryConfigs")
       .leftJoinAndSelect("countryConfigs.country", "country")
-      .leftJoinAndSelect("product.attributeMappings", "attributeMappings")
-      .leftJoinAndSelect("attributeMappings.attribute", "attribute")
-      .leftJoinAndSelect("attributeMappings.defaultOption", "defaultOption")
-      .leftJoinAndSelect("product.containerConfigs", "containerConfigs")
-      .leftJoinAndSelect("product.tradeTerms", "productTradeTerms")
-      .leftJoinAndSelect("productTradeTerms.tradeTerm", "tradeTerm")
+      .leftJoinAndSelect("product.images", "images")
+      .leftJoinAndSelect("images.asset", "imageAsset")
       .where("product.status = :status", { status: ProductStatus.PUBLISHED })
       .andWhere("product.isActive = true")
       .orderBy("product.sortOrder", "ASC")

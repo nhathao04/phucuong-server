@@ -42,13 +42,14 @@ const normalizeBoolean = (value: unknown): boolean | undefined => {
 
 export class ProductAttributeMappingInputDto {
   @ApiPropertyOptional({
-    example: "550e8400-e29b-41d4-a716-446655440000",
+    example: 12,
     description:
       "Attribute ID from product_attributes table. Use this or attributeCode.",
   })
   @IsOptional()
-  @IsUUID()
-  attributeId?: string;
+  @Type(() => Number)
+  @IsInt()
+  attributeId?: number;
 
   @ApiPropertyOptional({
     example: "coconut_size",
@@ -61,12 +62,13 @@ export class ProductAttributeMappingInputDto {
   attributeCode?: string;
 
   @ApiPropertyOptional({
-    example: "550e8400-e29b-41d4-a716-446655440001",
+    example: 34,
     description: "Default option ID from product_attribute_options.",
   })
   @IsOptional()
-  @IsUUID()
-  defaultOptionId?: string | null;
+  @Type(() => Number)
+  @IsInt()
+  defaultOptionId?: number | null;
 
   @ApiPropertyOptional({
     example: "Medium",
@@ -255,10 +257,11 @@ export class CreateProductDto {
   @MaxLength(120)
   productCode?: string | null;
 
-  @ApiPropertyOptional({ example: "550e8400-e29b-41d4-a716-446655440000" })
+  @ApiPropertyOptional({ example: 12 })
   @IsOptional()
-  @IsUUID()
-  productCategoryId?: string | null;
+  @Type(() => Number)
+  @IsInt()
+  productCategoryId?: number | null;
 
   @ApiPropertyOptional({
     example: "coconut-products",
@@ -469,10 +472,11 @@ export class UpdateProductDto {
   @MaxLength(120)
   productCode?: string | null;
 
-  @ApiPropertyOptional({ example: "550e8400-e29b-41d4-a716-446655440000" })
+  @ApiPropertyOptional({ example: 12 })
   @IsOptional()
-  @IsUUID()
-  productCategoryId?: string | null;
+  @Type(() => Number)
+  @IsInt()
+  productCategoryId?: number | null;
 
   @ApiPropertyOptional({ example: "coconut-products" })
   @IsOptional()

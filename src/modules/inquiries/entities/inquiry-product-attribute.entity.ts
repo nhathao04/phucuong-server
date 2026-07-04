@@ -14,12 +14,12 @@ import { ProductAttributeOption } from "../../products/entities/product-attribut
 
 @Entity({ name: "inquiry_product_attributes" })
 export class InquiryProductAttribute {
-  @PrimaryGeneratedColumn("uuid")
-  id!: string;
+  @PrimaryGeneratedColumn("increment", { type: "int" })
+  id!: number;
 
   @Index()
-  @Column({ type: "uuid" })
-  inquiryProductId!: string;
+  @Column({ type: "int" })
+  inquiryProductId!: number;
 
   @ManyToOne(
     () => InquiryProduct,
@@ -30,15 +30,15 @@ export class InquiryProductAttribute {
   inquiryProduct!: InquiryProduct;
 
   @Index()
-  @Column({ type: "uuid" })
-  attributeId!: string;
+  @Column({ type: "int" })
+  attributeId!: number;
 
   @ManyToOne(() => ProductAttribute, { onDelete: "RESTRICT" })
   @JoinColumn({ name: "attributeId" })
   attribute!: ProductAttribute;
 
-  @Column({ type: "uuid", nullable: true })
-  optionId!: string | null;
+  @Column({ type: "int", nullable: true })
+  optionId!: number | null;
 
   @ManyToOne(() => ProductAttributeOption, {
     nullable: true,

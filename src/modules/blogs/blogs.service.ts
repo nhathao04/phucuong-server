@@ -4,18 +4,40 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { QueryFailedError, Repository } from "typeorm";
+import { EntityManager, QueryFailedError, Repository } from "typeorm";
+import { Asset } from "../media/entities/asset.entity";
+import { AssetSummaryDto } from "../media/dto/asset.dto";
+import { BlogAsset } from "./entities/blog-asset.entity";
 import { Blog, BlogStatus } from "./entities/blog.entity";
-import { CreateBlogDto, UpdateBlogDto } from "./dto/blog.dto";
-import { BlogListQueryDto } from "./dto/blog-list-query.dto";
 import {
   BlogAuthorDto,
   BlogCategoryDto,
   BlogDetailDto,
   BlogListResponseDto,
   BlogSummaryDto,
-  BlogTagDto,
+  BlogTableOfContentsItemDto,
 } from "./dto/blog-response.dto";
+import {
+  BlogAssetRefDto,
+  CreateBlogDto,
+  UpdateBlogDto,
+} from "./dto/blog.dto";
+import { BlogListQueryDto } from "./dto/blog-list-query.dto";
+import { buildTableOfContents } from "./utils/toc.util";
+
+const toAssetSummary = (asset: Asset | null | undefined): AssetSummaryDto | null => {
+  if (!asset) return null;
+  return {
+    id: asset.id,
+    url: asset.url,
+    thumbnailUrl: asset.thumbnailUrl,
+    alt: asset.alt,
+    caption: asset.caption,
+    width: asset.width,
+    height: asset.height,
+    sortOrder: asset.sortOrder,
+  };
+};
 
 @Injectable()
 export class BlogsService {
@@ -55,12 +77,12 @@ export class BlogsService {
     };
   }
 
-  private toTagDtos(blog: Blog): BlogTagDto[] {
-    return (blog.tags ?? []).map((t) => ({
-      id: t.id,
-      name: t.name,
-      slug: t.slug,
-    }));
+  private toAssetLinkDtos(blog: Blog): AssetSummaryDto[] {
+    if (!blog.assets) return [];
+    return [...blog.assets]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((link) => toAssetSummary(link.asset))
+      .filter((asset): asset is AssetSummaryDto => Boolean(asset));
   }
 
   private toSummaryDto(blog: Blog): BlogSummaryDto {
@@ -70,8 +92,13 @@ export class BlogsService {
       slug: blog.slug,
       excerpt: blog.excerpt,
       thumbnailUrl: blog.thumbnailUrl,
+      thumbnail: toAssetSummary(blog.thumbnailAsset),
       category: this.toCategoryDto(blog),
-      tags: this.toTagDtos(blog),
+      tags: (blog.tags ?? []).map((t) => ({
+        id: t.id,
+        name: t.name,
+        slug: t.slug,
+      })),
       readTimeMinutes: blog.readTimeMinutes,
       status: blog.status,
       isFeatured: blog.isFeatured,
@@ -91,14 +118,66 @@ export class BlogsService {
     return {
       ...this.toSummaryDto(blog),
       coverImageUrl: blog.coverImageUrl,
+      coverImage: toAssetSummary(blog.coverImage),
+      assets: this.toAssetLinkDtos(blog),
+      tableOfContents: this.toToc(blog),
       contentHtml: blog.contentHtml,
       contentJson: blog.contentJson,
       contentText: blog.contentText,
     };
   }
 
+  private toToc(blog: Blog): BlogTableOfContentsItemDto[] {
+    if (!blog.contentJson) return [];
+    return buildTableOfContents(
+      blog.contentJson as unknown as Parameters<typeof buildTableOfContents>[0],
+    );
+  }
+
   private loadRelations() {
-    return { author: true, category: true, tags: true } as const;
+    return {
+      author: true,
+      category: true,
+      tags: true,
+      thumbnailAsset: true,
+      coverImage: true,
+      assets: { asset: true },
+    } as const;
+  }
+
+  private async syncAssets(
+    manager: EntityManager,
+    blogId: string,
+    assets?: BlogAssetRefDto[] | null,
+  ): Promise<void> {
+    if (assets === undefined || assets === null) {
+      return;
+    }
+    const blogAssetRepository = manager.getRepository(BlogAsset);
+    await blogAssetRepository.delete({ blogId });
+
+    if (assets.length === 0) {
+      return;
+    }
+
+    const seen = new Set<string>();
+    const entries: BlogAsset[] = [];
+    assets.forEach((asset, index) => {
+      if (!asset.assetId || seen.has(asset.assetId)) {
+        return;
+      }
+      seen.add(asset.assetId);
+      entries.push(
+        blogAssetRepository.create({
+          blogId,
+          assetId: asset.assetId,
+          sortOrder: asset.sortOrder ?? index,
+        }),
+      );
+    });
+    if (entries.length > 0) {
+      await blogAssetRepository.save(entries);
+    }
   }
 
   private isUniqueConstraintError(error: unknown): boolean {
@@ -122,6 +201,10 @@ export class BlogsService {
       .leftJoinAndSelect("blog.author", "author")
       .leftJoinAndSelect("blog.category", "category")
       .leftJoinAndSelect("blog.tags", "tags")
+      .leftJoinAndSelect("blog.thumbnailAsset", "thumbnailAsset")
+      .leftJoinAndSelect("blog.coverImage", "coverImage")
+      .leftJoinAndSelect("blog.assets", "assets")
+      .leftJoinAndSelect("assets.asset", "assetRef")
       .orderBy("blog.sortOrder", "ASC")
       .addOrderBy("blog.createdAt", "DESC")
       .skip((page - 1) * limit)
@@ -165,37 +248,49 @@ export class BlogsService {
 
   async create(dto: CreateBlogDto, authorId: string): Promise<BlogDetailDto> {
     try {
-      const slug = this.resolveSlug(dto.title, dto.slug);
-      const status = dto.status ?? BlogStatus.DRAFT;
+      return await this.blogsRepository.manager.transaction(
+        async (manager) => {
+          const blogRepository = manager.getRepository(Blog);
+          const slug = this.resolveSlug(dto.title, dto.slug);
+          const status = dto.status ?? BlogStatus.DRAFT;
 
-      const blog = this.blogsRepository.create({
-        title: dto.title,
-        slug,
-        excerpt: dto.excerpt ?? null,
-        contentHtml: dto.contentHtml ?? null,
-        contentJson: dto.contentJson ?? null,
-        contentText: dto.contentText ?? null,
-        thumbnailUrl: dto.thumbnailUrl ?? null,
-        coverImageUrl: dto.coverImageUrl ?? null,
-        readTimeMinutes: dto.readTimeMinutes ?? null,
-        seoTitle: dto.seoTitle ?? null,
-        metaDescription: dto.metaDescription ?? null,
-        focusKeyword: dto.focusKeyword ?? null,
-        status,
-        isFeatured: dto.isFeatured ?? false,
-        sortOrder: dto.sortOrder ?? 0,
-        isActive: dto.isActive ?? true,
-        publishedAt: status === BlogStatus.PUBLISHED ? new Date() : null,
-        authorId,
-      });
+          const blog = blogRepository.create({
+            title: dto.title,
+            slug,
+            excerpt: dto.excerpt ?? null,
+            contentHtml: dto.contentHtml ?? null,
+            contentJson: dto.contentJson ?? null,
+            contentText: dto.contentText ?? null,
+            thumbnailUrl: dto.thumbnailUrl ?? null,
+            thumbnailAssetId: dto.thumbnailAssetId ?? null,
+            coverImageUrl: dto.coverImageUrl ?? null,
+            coverImageAssetId: dto.coverImageAssetId ?? null,
+            readTimeMinutes: dto.readTimeMinutes ?? null,
+            seoTitle: dto.seoTitle ?? null,
+            metaDescription: dto.metaDescription ?? null,
+            focusKeyword: dto.focusKeyword ?? null,
+            status,
+            isFeatured: dto.isFeatured ?? false,
+            sortOrder: dto.sortOrder ?? 0,
+            isActive: dto.isActive ?? true,
+            publishedAt: status === BlogStatus.PUBLISHED ? new Date() : null,
+            authorId,
+          });
 
-      const saved = await this.blogsRepository.save(blog);
-      const full = await this.blogsRepository.findOne({
-        where: { id: saved.id },
-        relations: this.loadRelations(),
-      });
+          const saved = await blogRepository.save(blog);
 
-      return this.toDetailDto(full!);
+          if (dto.assets) {
+            await this.syncAssets(manager, saved.id, dto.assets);
+          }
+
+          const full = await blogRepository.findOne({
+            where: { id: saved.id },
+            relations: this.loadRelations(),
+          });
+
+          return this.toDetailDto(full!);
+        },
+      );
     } catch (error) {
       if (this.isUniqueConstraintError(error)) {
         throw new ConflictException("Blog slug already exists");
@@ -205,54 +300,72 @@ export class BlogsService {
   }
 
   async update(id: string, dto: UpdateBlogDto): Promise<BlogDetailDto> {
-    const blog = await this.blogsRepository.findOne({
-      where: { id },
-      relations: this.loadRelations(),
-    });
-
-    if (!blog) throw new NotFoundException("Blog not found");
-
     try {
-      if (dto.title !== undefined || dto.slug !== undefined) {
-        blog.slug = this.resolveSlug(dto.title ?? blog.title, dto.slug);
-      }
+      return await this.blogsRepository.manager.transaction(
+        async (manager) => {
+          const blogRepository = manager.getRepository(Blog);
+          const blog = await blogRepository.findOne({
+            where: { id },
+            relations: this.loadRelations(),
+          });
 
-      if (dto.title !== undefined) blog.title = dto.title;
-      if (dto.excerpt !== undefined) blog.excerpt = dto.excerpt ?? null;
-      if (dto.contentHtml !== undefined)
-        blog.contentHtml = dto.contentHtml ?? null;
-      if (dto.contentJson !== undefined)
-        blog.contentJson = dto.contentJson ?? null;
-      if (dto.contentText !== undefined)
-        blog.contentText = dto.contentText ?? null;
-      if (dto.thumbnailUrl !== undefined)
-        blog.thumbnailUrl = dto.thumbnailUrl ?? null;
-      if (dto.coverImageUrl !== undefined)
-        blog.coverImageUrl = dto.coverImageUrl ?? null;
-      if (dto.readTimeMinutes !== undefined)
-        blog.readTimeMinutes = dto.readTimeMinutes ?? null;
-      if (dto.seoTitle !== undefined) blog.seoTitle = dto.seoTitle ?? null;
-      if (dto.metaDescription !== undefined)
-        blog.metaDescription = dto.metaDescription ?? null;
-      if (dto.focusKeyword !== undefined)
-        blog.focusKeyword = dto.focusKeyword ?? null;
-      if (dto.isFeatured !== undefined) blog.isFeatured = dto.isFeatured;
-      if (dto.sortOrder !== undefined) blog.sortOrder = dto.sortOrder;
-      if (dto.isActive !== undefined) blog.isActive = dto.isActive;
+          if (!blog) throw new NotFoundException("Blog not found");
 
-      if (dto.status !== undefined && dto.status !== blog.status) {
-        blog.status = dto.status;
-        if (dto.status === BlogStatus.PUBLISHED && !blog.publishedAt) {
-          blog.publishedAt = new Date();
-        }
-      }
+          if (dto.title !== undefined || dto.slug !== undefined) {
+            blog.slug = this.resolveSlug(dto.title ?? blog.title, dto.slug);
+          }
 
-      const saved = await this.blogsRepository.save(blog);
-      const full = await this.blogsRepository.findOne({
-        where: { id: saved.id },
-        relations: this.loadRelations(),
-      });
-      return this.toDetailDto(full!);
+          if (dto.title !== undefined) blog.title = dto.title;
+          if (dto.excerpt !== undefined) blog.excerpt = dto.excerpt ?? null;
+          if (dto.contentHtml !== undefined)
+            blog.contentHtml = dto.contentHtml ?? null;
+          if (dto.contentJson !== undefined)
+            blog.contentJson = dto.contentJson ?? null;
+          if (dto.contentText !== undefined)
+            blog.contentText = dto.contentText ?? null;
+          if (dto.thumbnailUrl !== undefined)
+            blog.thumbnailUrl = dto.thumbnailUrl ?? null;
+          if (dto.thumbnailAssetId !== undefined) {
+            blog.thumbnailAssetId = dto.thumbnailAssetId ?? null;
+            blog.thumbnailAsset = null;
+          }
+          if (dto.coverImageUrl !== undefined)
+            blog.coverImageUrl = dto.coverImageUrl ?? null;
+          if (dto.coverImageAssetId !== undefined) {
+            blog.coverImageAssetId = dto.coverImageAssetId ?? null;
+            blog.coverImage = null;
+          }
+          if (dto.readTimeMinutes !== undefined)
+            blog.readTimeMinutes = dto.readTimeMinutes ?? null;
+          if (dto.seoTitle !== undefined) blog.seoTitle = dto.seoTitle ?? null;
+          if (dto.metaDescription !== undefined)
+            blog.metaDescription = dto.metaDescription ?? null;
+          if (dto.focusKeyword !== undefined)
+            blog.focusKeyword = dto.focusKeyword ?? null;
+          if (dto.isFeatured !== undefined) blog.isFeatured = dto.isFeatured;
+          if (dto.sortOrder !== undefined) blog.sortOrder = dto.sortOrder;
+          if (dto.isActive !== undefined) blog.isActive = dto.isActive;
+
+          if (dto.status !== undefined && dto.status !== blog.status) {
+            blog.status = dto.status;
+            if (dto.status === BlogStatus.PUBLISHED && !blog.publishedAt) {
+              blog.publishedAt = new Date();
+            }
+          }
+
+          const saved = await blogRepository.save(blog);
+
+          if (dto.assets !== undefined) {
+            await this.syncAssets(manager, saved.id, dto.assets);
+          }
+
+          const full = await blogRepository.findOne({
+            where: { id: saved.id },
+            relations: this.loadRelations(),
+          });
+          return this.toDetailDto(full!);
+        },
+      );
     } catch (error) {
       if (this.isUniqueConstraintError(error)) {
         throw new ConflictException("Blog slug already exists");
@@ -280,6 +393,7 @@ export class BlogsService {
       .leftJoinAndSelect("blog.author", "author")
       .leftJoinAndSelect("blog.category", "category")
       .leftJoinAndSelect("blog.tags", "tags")
+      .leftJoinAndSelect("blog.thumbnailAsset", "thumbnailAsset")
       .where("blog.status = :status", { status: BlogStatus.PUBLISHED })
       .andWhere("blog.isActive = true")
       .orderBy("blog.sortOrder", "ASC")

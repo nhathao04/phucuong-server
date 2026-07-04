@@ -12,8 +12,8 @@ import { Inquiry } from "./inquiry.entity";
 
 @Entity({ name: "inquiry_requirements" })
 export class InquiryRequirement {
-  @PrimaryGeneratedColumn("uuid")
-  id!: string;
+  @PrimaryGeneratedColumn("increment", { type: "int" })
+  id!: number;
 
   @Index({ unique: true })
   @Column({ type: "uuid" })

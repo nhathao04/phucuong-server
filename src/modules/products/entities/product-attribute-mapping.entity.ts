@@ -14,8 +14,8 @@ import { ProductAttributeOption } from "./product-attribute-option.entity";
 
 @Entity({ name: "product_attribute_mappings" })
 export class ProductAttributeMapping {
-  @PrimaryGeneratedColumn("uuid")
-  id!: string;
+  @PrimaryGeneratedColumn("increment", { type: "int" })
+  id!: number;
 
   @Index()
   @Column({ type: "uuid" })
@@ -28,8 +28,8 @@ export class ProductAttributeMapping {
   product!: Product;
 
   @Index()
-  @Column({ type: "uuid" })
-  attributeId!: string;
+  @Column({ type: "int" })
+  attributeId!: number;
 
   @ManyToOne(() => ProductAttribute, (attribute) => attribute.productMappings, {
     onDelete: "CASCADE",
@@ -37,8 +37,8 @@ export class ProductAttributeMapping {
   @JoinColumn({ name: "attributeId" })
   attribute!: ProductAttribute;
 
-  @Column({ type: "uuid", nullable: true })
-  defaultOptionId!: string | null;
+  @Column({ type: "int", nullable: true })
+  defaultOptionId!: number | null;
 
   @ManyToOne(() => ProductAttributeOption, {
     nullable: true,

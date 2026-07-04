@@ -7,10 +7,13 @@ import {
   JoinTable,
   ManyToMany,
   ManyToOne,
+  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from "typeorm";
+import { Asset } from "../../media/entities/asset.entity";
 import { User } from "../../users/entities/user.entity";
+import { BlogAsset } from "./blog-asset.entity";
 import { BlogCategory } from "./blog-category.entity";
 import { BlogTag } from "./blog-tag.entity";
 
@@ -49,6 +52,25 @@ export class Blog {
 
   @Column({ type: "varchar", length: 500, nullable: true })
   coverImageUrl!: string | null;
+
+  @Index()
+  @Column({ type: "uuid", nullable: true })
+  thumbnailAssetId!: string | null;
+
+  @ManyToOne(() => Asset, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({ name: "thumbnailAssetId" })
+  thumbnailAsset!: Asset | null;
+
+  @Index()
+  @Column({ type: "uuid", nullable: true })
+  coverImageAssetId!: string | null;
+
+  @ManyToOne(() => Asset, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({ name: "coverImageAssetId" })
+  coverImage!: Asset | null;
+
+  @OneToMany(() => BlogAsset, (blogAsset) => blogAsset.blog)
+  assets!: BlogAsset[];
 
   @Column({ type: "integer", nullable: true })
   readTimeMinutes!: number | null;

@@ -32,15 +32,19 @@ export class StaffRoleGuard implements CanActivate {
       throw new ForbiddenException("Only admin or staff can access");
     }
 
-    if (!["Admin", "Staff"].includes(user.role.name)) {
+    const roleName = user.role.name?.trim();
+    if (!roleName) {
       throw new ForbiddenException("Only admin or staff can access");
     }
 
-    request.user = {
-      ...request.user,
-      role: user.role.name,
-    };
+    if (["admin", "staff"].includes(roleName.toLowerCase())) {
+      request.user = {
+        ...request.user,
+        role: roleName,
+      };
+      return true;
+    }
 
-    return true;
+    throw new ForbiddenException("Only admin or staff can access");
   }
 }

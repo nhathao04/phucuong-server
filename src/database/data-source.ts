@@ -35,6 +35,13 @@ import { User } from "../modules/users/entities/user.entity";
 import { Blog } from "../modules/blogs/entities/blog.entity";
 import { BlogCategory } from "../modules/blogs/entities/blog-category.entity";
 import { BlogTag } from "../modules/blogs/entities/blog-tag.entity";
+import { Asset } from "../modules/media/entities/asset.entity";
+import { BlogAsset } from "../modules/blogs/entities/blog-asset.entity";
+import { ProductTechnicalSpecification } from "../modules/products/entities/product-technical-specification.entity";
+import { ProductPackagingOption } from "../modules/products/entities/product-packaging-option.entity";
+import { ProductTargetBuyer } from "../modules/products/entities/product-target-buyer.entity";
+import { ProductWhyChooseUs } from "../modules/products/entities/product-why-choose-us.entity";
+import { ProductImage } from "../modules/products/entities/product-image.entity";
 
 export default new DataSource({
   type: "postgres",
@@ -79,6 +86,13 @@ export default new DataSource({
     Blog,
     BlogCategory,
     BlogTag,
+    BlogAsset,
+    Asset,
+    ProductTechnicalSpecification,
+    ProductPackagingOption,
+    ProductTargetBuyer,
+    ProductWhyChooseUs,
+    ProductImage,
   ],
   migrations: ["src/database/migrations/*.ts"],
   synchronize: true,

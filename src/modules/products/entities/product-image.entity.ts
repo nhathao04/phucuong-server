@@ -6,13 +6,15 @@ import {
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
-  UpdateDateColumn,
 } from "typeorm";
-import { Certificate } from "../../inquiries/entities/certificate.entity";
+import { Asset } from "../../media/entities/asset.entity";
 import { Product } from "./product.entity";
 
-@Entity({ name: "product_certificates" })
-export class ProductCertificate {
+@Entity({ name: "product_images" })
+@Index("UQ_product_images_productId_assetId", ["productId", "assetId"], {
+  unique: true,
+})
+export class ProductImage {
   @PrimaryGeneratedColumn("increment", { type: "int" })
   id!: number;
 
@@ -20,27 +22,23 @@ export class ProductCertificate {
   @Column({ type: "uuid" })
   productId!: string;
 
-  @ManyToOne(() => Product, { onDelete: "CASCADE" })
+  @ManyToOne(() => Product, (product) => product.images, {
+    onDelete: "CASCADE",
+  })
   @JoinColumn({ name: "productId" })
   product!: Product;
 
   @Index()
   @Column({ type: "uuid" })
-  certificateId!: string;
+  assetId!: string;
 
-  @ManyToOne(() => Certificate, { onDelete: "CASCADE" })
-  @JoinColumn({ name: "certificateId" })
-  certificate!: Certificate;
-
-  @Column({ type: "boolean", default: false })
-  isRequired!: boolean;
+  @ManyToOne(() => Asset, { onDelete: "CASCADE" })
+  @JoinColumn({ name: "assetId" })
+  asset!: Asset;
 
   @Column({ type: "integer", default: 0 })
   sortOrder!: number;
 
   @CreateDateColumn({ type: "timestamp with time zone" })
   createdAt!: Date;
-
-  @UpdateDateColumn({ type: "timestamp with time zone" })
-  updatedAt!: Date;
 }

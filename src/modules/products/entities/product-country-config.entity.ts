@@ -13,8 +13,8 @@ import { Product } from "./product.entity";
 
 @Entity({ name: "product_country_configs" })
 export class ProductCountryConfig {
-  @PrimaryGeneratedColumn("uuid")
-  id!: string;
+  @PrimaryGeneratedColumn("increment", { type: "int" })
+  id!: number;
 
   @Index()
   @Column({ type: "uuid" })

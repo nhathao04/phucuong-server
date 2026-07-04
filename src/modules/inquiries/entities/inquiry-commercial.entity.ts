@@ -13,8 +13,8 @@ import { InquiryPaymentTerm, InquiryTradeTerm } from "./inquiry.enums";
 
 @Entity({ name: "inquiry_commercials" })
 export class InquiryCommercial {
-  @PrimaryGeneratedColumn("uuid")
-  id!: string;
+  @PrimaryGeneratedColumn("increment", { type: "int" })
+  id!: number;
 
   @Index({ unique: true })
   @Column({ type: "uuid" })

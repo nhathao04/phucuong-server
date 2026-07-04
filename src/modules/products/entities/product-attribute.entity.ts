@@ -19,8 +19,8 @@ export enum ProductAttributeType {
 
 @Entity({ name: "product_attributes" })
 export class ProductAttribute {
-  @PrimaryGeneratedColumn("uuid")
-  id!: string;
+  @PrimaryGeneratedColumn("increment", { type: "int" })
+  id!: number;
 
   @Index({ unique: true })
   @Column({ type: "varchar", length: 100 })

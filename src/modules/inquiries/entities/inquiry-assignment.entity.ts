@@ -13,8 +13,8 @@ import { AssignmentRole } from "./inquiry.enums";
 
 @Entity({ name: "inquiry_assignments" })
 export class InquiryAssignment {
-  @PrimaryGeneratedColumn("uuid")
-  id!: string;
+  @PrimaryGeneratedColumn("increment", { type: "int" })
+  id!: number;
 
   @Index()
   @Column({ type: "uuid" })

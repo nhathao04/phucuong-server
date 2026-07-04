@@ -1,9 +1,39 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { Type } from "class-transformer";
+import { IsInt, IsOptional } from "class-validator";
 import { ProductStatus } from "../entities/product.entity";
 
-export class ProductCategorySummaryDto {
-  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
+export class AssetSummaryDto {
+  @ApiProperty({ example: "asset-uuid" })
   id!: string;
+
+  @ApiProperty({ example: "https://cdn.example.com/uploads/image.webp" })
+  url!: string;
+
+  @ApiPropertyOptional({
+    example: "https://cdn.example.com/uploads/image-thumb.webp",
+  })
+  thumbnailUrl!: string | null;
+
+  @ApiPropertyOptional({ example: "SEO image alt text" })
+  alt!: string | null;
+
+  @ApiPropertyOptional({ example: "Optional caption" })
+  caption!: string | null;
+
+  @ApiPropertyOptional({ example: 1600 })
+  width!: number | null;
+
+  @ApiPropertyOptional({ example: 1000 })
+  height!: number | null;
+
+  @ApiPropertyOptional({ example: 0 })
+  sortOrder!: number;
+}
+
+export class ProductCategorySummaryDto {
+  @ApiProperty({ example: 12 })
+  id!: number;
 
   @ApiProperty({ example: "Coconut Products" })
   name!: string;
@@ -24,8 +54,8 @@ export class ProductCountrySummaryDto {
 }
 
 export class ProductCountryConfigSummaryDto {
-  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440020" })
-  id!: string;
+  @ApiProperty({ example: 1 })
+  id!: number;
 
   @ApiProperty({ type: ProductCountrySummaryDto })
   country!: ProductCountrySummaryDto;
@@ -58,11 +88,11 @@ export class ProductCountryConfigSummaryDto {
 }
 
 export class ProductAttributeMappingSummaryDto {
-  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
-  id!: string;
+  @ApiProperty({ example: 1 })
+  id!: number;
 
-  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440001" })
-  attributeId!: string;
+  @ApiProperty({ example: 12 })
+  attributeId!: number;
 
   @ApiPropertyOptional({ example: "coconut_size" })
   attributeCode!: string | null;
@@ -70,8 +100,8 @@ export class ProductAttributeMappingSummaryDto {
   @ApiPropertyOptional({ example: "Coconut Size" })
   attributeName!: string | null;
 
-  @ApiPropertyOptional({ example: "550e8400-e29b-41d4-a716-446655440002" })
-  defaultOptionId!: string | null;
+  @ApiPropertyOptional({ example: 34 })
+  defaultOptionId!: number | null;
 
   @ApiPropertyOptional({ example: "Medium" })
   defaultOptionValue!: string | null;
@@ -90,8 +120,8 @@ export class ProductAttributeMappingSummaryDto {
 }
 
 export class ProductContainerConfigSummaryDto {
-  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
-  id!: string;
+  @ApiProperty({ example: 1 })
+  id!: number;
 
   @ApiProperty({ example: "20FT" })
   containerCode!: string;
@@ -110,8 +140,8 @@ export class ProductContainerConfigSummaryDto {
 }
 
 export class ProductTradeTermSummaryDto {
-  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
-  id!: string;
+  @ApiProperty({ example: 1 })
+  id!: number;
 
   @ApiProperty({ example: 1 })
   tradeTermId!: number;
@@ -129,6 +159,139 @@ export class ProductTradeTermSummaryDto {
   sortOrder!: number;
 }
 
+export class ProductHeroStatDto {
+  @ApiProperty({ example: "10+" })
+  value!: string;
+
+  @ApiProperty({ example: "Years export" })
+  label!: string;
+}
+
+export class ProductHeroDto {
+  @ApiPropertyOptional({ example: "Premium Export Quality" })
+  eyebrow!: string | null;
+
+  @ApiPropertyOptional({ example: "Whole Dried Coconut" })
+  title!: string | null;
+
+  @ApiPropertyOptional({
+    example: "Vietnamese coconut products prepared for international buyers.",
+  })
+  subtitle!: string | null;
+
+  @ApiPropertyOptional({ type: [ProductHeroStatDto] })
+  @Type(() => ProductHeroStatDto)
+  stats!: ProductHeroStatDto[];
+}
+
+export class ProductTechnicalSpecificationDto {
+  @ApiProperty({ example: "Origin" })
+  label!: string;
+
+  @ApiProperty({ example: "Ben Tre, Vietnam" })
+  value!: string;
+
+  @ApiPropertyOptional({ example: "kg" })
+  unit!: string | null;
+}
+
+export class ProductPackagingOptionDto {
+  @ApiProperty({ example: "Export Carton" })
+  title!: string;
+
+  @ApiPropertyOptional({ example: "Strong carton packaging for sea freight." })
+  description!: string | null;
+
+  @ApiProperty({
+    type: [String],
+    example: ["Retail or bulk packing", "Palletized on request"],
+  })
+  details!: string[];
+}
+
+export class ProductTargetBuyerDto {
+  @ApiProperty({ example: "Importers" })
+  title!: string;
+
+  @ApiPropertyOptional({ example: "Stable Vietnamese coconut supply." })
+  description!: string | null;
+}
+
+export class ProductWhyChooseUsDto {
+  @ApiProperty({ example: "Reliable Export Coordination" })
+  title!: string;
+
+  @ApiPropertyOptional({
+    example: "Clear production, documentation, and shipment planning.",
+  })
+  description!: string | null;
+}
+
+export class ProductFaqSummaryDto {
+  @ApiProperty({ example: 1 })
+  id!: number;
+
+  @ApiProperty({ example: "What is the MOQ?" })
+  question!: string;
+
+  @ApiProperty({ example: "The typical MOQ is 1 container." })
+  answer!: string;
+
+  @ApiProperty({ example: 0 })
+  sortOrder!: number;
+}
+
+export class ProductCertificateSummaryDto {
+  @ApiProperty({ example: 1 })
+  id!: number;
+
+  @ApiProperty({ example: "ISO 9001:2015" })
+  name!: string;
+
+  @ApiPropertyOptional({ example: "available" })
+  status!: string | null;
+
+  @ApiPropertyOptional({
+    example: "https://cdn.example.com/certificates/iso-9001.pdf",
+  })
+  fileUrl!: string | null;
+}
+
+export class ProductQuoteConfigFieldDto {
+  @ApiProperty({ example: "quantity" })
+  key!: string;
+
+  @ApiProperty({ example: "Quantity" })
+  label!: string;
+
+  @ApiProperty({ example: "number", enum: ["text", "number", "select", "textarea", "date"] })
+  type!: "text" | "number" | "select" | "textarea" | "date";
+
+  @ApiPropertyOptional({ example: "MT" })
+  unit!: string | null;
+
+  @ApiProperty({ example: true })
+  required!: boolean;
+
+  @ApiPropertyOptional({
+    type: "array",
+    items: { type: "object" },
+  })
+  options!: Array<{ value: string; label: string }>;
+}
+
+export class ProductQuoteConfigDto {
+  @ApiPropertyOptional({ example: "1 container" })
+  moq!: string | null;
+
+  @ApiProperty({ type: [String], example: ["FOB", "CNF", "CIF"] })
+  tradeTerms!: string[];
+
+  @ApiProperty({ type: [ProductQuoteConfigFieldDto] })
+  @Type(() => ProductQuoteConfigFieldDto)
+  fields!: ProductQuoteConfigFieldDto[];
+}
+
 export class ProductSummaryDto {
   @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
   id!: string;
@@ -142,8 +305,14 @@ export class ProductSummaryDto {
   @ApiPropertyOptional({ example: "PC-DRIED-001" })
   productCode!: string | null;
 
-  @ApiPropertyOptional({ example: "category-uuid" })
-  productCategoryId!: string | null;
+  @ApiPropertyOptional({ example: 12 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  productCategoryId!: number | null;
+
+  @ApiPropertyOptional({ type: ProductCategorySummaryDto })
+  productCategory!: ProductCategorySummaryDto | null;
 
   @ApiPropertyOptional({ example: "Organic Cashew Nuts | Export Supplier" })
   seoTitle!: string | null;
@@ -174,14 +343,24 @@ export class ProductSummaryDto {
   })
   imageUrl!: string | null;
 
-  @ApiPropertyOptional({ example: "draft", enum: ProductStatus })
-  status!: ProductStatus;
+  @ApiPropertyOptional({
+    type: [String],
+    example: ["Export Ready", "FCL"],
+  })
+  badges!: string[];
+
+  @ApiProperty({ type: [AssetSummaryDto] })
+  @Type(() => AssetSummaryDto)
+  images!: AssetSummaryDto[];
 
   @ApiProperty({ example: 0 })
   sortOrder!: number;
 
   @ApiProperty({ example: false })
   isFeatured!: boolean;
+
+  @ApiProperty({ enum: ProductStatus, example: ProductStatus.PUBLISHED })
+  status!: ProductStatus;
 
   @ApiPropertyOptional({ example: "0801.32" })
   hsCode!: string | null;
@@ -215,50 +394,8 @@ export class ProductSummaryDto {
 }
 
 export class ProductListItemDto extends ProductSummaryDto {
-  @ApiPropertyOptional({ type: ProductCategorySummaryDto })
-  productCategory!: ProductCategorySummaryDto | null;
-
   @ApiProperty({ type: [ProductCountryConfigSummaryDto] })
   countryConfigs!: ProductCountryConfigSummaryDto[];
-
-  @ApiProperty({ type: [ProductAttributeMappingSummaryDto] })
-  attributeMappings!: ProductAttributeMappingSummaryDto[];
-
-  @ApiProperty({ type: [ProductContainerConfigSummaryDto] })
-  containerConfigs!: ProductContainerConfigSummaryDto[];
-
-  @ApiProperty({ type: [ProductTradeTermSummaryDto] })
-  tradeTerms!: ProductTradeTermSummaryDto[];
-}
-
-export class ProductFaqSummaryDto {
-  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
-  id!: string;
-
-  @ApiProperty({ example: "What is the MOQ?" })
-  question!: string;
-
-  @ApiProperty({ example: "The typical MOQ is 1 container." })
-  answer!: string;
-
-  @ApiProperty({ example: 0 })
-  sortOrder!: number;
-}
-
-export class ProductCertificateSummaryDto {
-  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
-  id!: string;
-
-  @ApiProperty({ example: "ISO 9001:2015" })
-  name!: string;
-
-  @ApiPropertyOptional({ example: "available" })
-  status!: string | null;
-
-  @ApiPropertyOptional({
-    example: "https://cdn.example.com/certificates/iso-9001.pdf",
-  })
-  fileUrl!: string | null;
 }
 
 export class ProductDetailDto extends ProductSummaryDto {
@@ -274,11 +411,35 @@ export class ProductDetailDto extends ProductSummaryDto {
   @ApiProperty({ type: [ProductTradeTermSummaryDto] })
   tradeTerms!: ProductTradeTermSummaryDto[];
 
+  @ApiProperty({ type: ProductHeroDto })
+  @Type(() => ProductHeroDto)
+  hero!: ProductHeroDto | null;
+
+  @ApiProperty({ type: [ProductTechnicalSpecificationDto] })
+  @Type(() => ProductTechnicalSpecificationDto)
+  technicalSpecifications!: ProductTechnicalSpecificationDto[];
+
+  @ApiProperty({ type: [ProductPackagingOptionDto] })
+  @Type(() => ProductPackagingOptionDto)
+  packagingOptions!: ProductPackagingOptionDto[];
+
+  @ApiProperty({ type: [ProductTargetBuyerDto] })
+  @Type(() => ProductTargetBuyerDto)
+  targetBuyers!: ProductTargetBuyerDto[];
+
+  @ApiProperty({ type: [ProductWhyChooseUsDto] })
+  @Type(() => ProductWhyChooseUsDto)
+  whyChooseUs!: ProductWhyChooseUsDto[];
+
   @ApiProperty({ type: [ProductFaqSummaryDto] })
   faqs!: ProductFaqSummaryDto[];
 
   @ApiProperty({ type: [ProductCertificateSummaryDto] })
   certificates!: ProductCertificateSummaryDto[];
+
+  @ApiProperty({ type: ProductQuoteConfigDto })
+  @Type(() => ProductQuoteConfigDto)
+  quoteConfig!: ProductQuoteConfigDto | null;
 }
 
 export class ProductListResponseDto {

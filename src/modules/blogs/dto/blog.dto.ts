@@ -1,14 +1,17 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform, Type } from "class-transformer";
 import {
+  IsArray,
   IsBoolean,
   IsEnum,
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Length,
   Matches,
   MaxLength,
+  ValidateNested,
 } from "class-validator";
 import { BlogStatus } from "../entities/blog.entity";
 
@@ -29,6 +32,18 @@ const normalizeBoolean = (value: unknown): boolean | undefined => {
 
   return undefined;
 };
+
+export class BlogAssetRefDto {
+  @ApiProperty({ example: "asset-uuid" })
+  @IsUUID()
+  assetId!: string;
+
+  @ApiPropertyOptional({ example: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  sortOrder?: number;
+}
 
 export class CreateBlogDto {
   @ApiProperty({ example: "Top 5 Benefits of Organic Cashew Nuts" })
@@ -62,6 +77,7 @@ export class CreateBlogDto {
 
   @ApiPropertyOptional({
     example: "https://cdn.example.com/images/cashew-blog.jpg",
+    description: "Legacy thumbnail URL. Prefer thumbnailAssetId.",
   })
   @IsOptional()
   @IsString()
@@ -69,13 +85,32 @@ export class CreateBlogDto {
   thumbnailUrl?: string | null;
 
   @ApiPropertyOptional({
+    example: "asset-thumbnail-uuid",
+    description: "Asset object stored in /api/media.",
+  })
+  @IsOptional()
+  @IsUUID()
+  thumbnailAssetId?: string | null;
+
+  @ApiPropertyOptional({
     example: "https://cdn.example.com/images/cashew-blog-cover.jpg",
-    description: "Full-width cover image shown at the top of the article.",
   })
   @IsOptional()
   @IsString()
   @MaxLength(500)
   coverImageUrl?: string | null;
+
+  @ApiPropertyOptional({ example: "asset-cover-uuid" })
+  @IsOptional()
+  @IsUUID()
+  coverImageAssetId?: string | null;
+
+  @ApiPropertyOptional({ type: [BlogAssetRefDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BlogAssetRefDto)
+  assets?: BlogAssetRefDto[];
 
   @ApiPropertyOptional({
     example: "<h2>Start with the product use case</h2><p>...</p>",
@@ -89,7 +124,6 @@ export class CreateBlogDto {
     type: "object",
     additionalProperties: true,
     description: "ProseMirror/Tiptap JSON – source of truth for the editor.",
-    example: { type: "doc", content: [] },
   })
   @IsOptional()
   contentJson?: Record<string, unknown> | null;
@@ -184,7 +218,6 @@ export class UpdateBlogDto {
     type: "object",
     additionalProperties: true,
     description: "ProseMirror/Tiptap JSON.",
-    example: { type: "doc", content: [] },
   })
   @IsOptional()
   contentJson?: Record<string, unknown> | null;
@@ -202,6 +235,11 @@ export class UpdateBlogDto {
   @MaxLength(500)
   thumbnailUrl?: string | null;
 
+  @ApiPropertyOptional({ example: "asset-thumbnail-uuid" })
+  @IsOptional()
+  @IsUUID()
+  thumbnailAssetId?: string | null;
+
   @ApiPropertyOptional({
     example: "https://cdn.example.com/images/updated-cover.jpg",
   })
@@ -209,6 +247,18 @@ export class UpdateBlogDto {
   @IsString()
   @MaxLength(500)
   coverImageUrl?: string | null;
+
+  @ApiPropertyOptional({ example: "asset-cover-uuid" })
+  @IsOptional()
+  @IsUUID()
+  coverImageAssetId?: string | null;
+
+  @ApiPropertyOptional({ type: [BlogAssetRefDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BlogAssetRefDto)
+  assets?: BlogAssetRefDto[];
 
   @ApiPropertyOptional({ example: 5 })
   @IsOptional()
