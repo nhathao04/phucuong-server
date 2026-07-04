@@ -36,6 +36,8 @@ import { RefreshToken } from "../modules/auth/entities/refresh-token.entity";
 import { Role } from "../modules/users/entities/role.entity";
 import { User } from "../modules/users/entities/user.entity";
 import { Blog } from "../modules/blogs/entities/blog.entity";
+import { BlogCategory } from "../modules/blogs/entities/blog-category.entity";
+import { BlogTag } from "../modules/blogs/entities/blog-tag.entity";
 
 export const typeOrmAsyncConfig = (
   configService: ConfigService,
@@ -80,6 +82,8 @@ export const typeOrmAsyncConfig = (
     EmailLog,
     Notification,
     Blog,
+    BlogCategory,
+    BlogTag,
   ],
   synchronize: true,
   logging: ["error", "warn"],

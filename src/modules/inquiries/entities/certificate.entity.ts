@@ -17,6 +17,12 @@ export class Certificate {
   @Column({ type: "varchar", length: 150 })
   name!: string;
 
+  @Column({ type: "varchar", length: 60, nullable: true })
+  status!: string | null;
+
+  @Column({ type: "varchar", length: 500, nullable: true })
+  fileUrl!: string | null;
+
   @OneToMany(
     () => InquiryCertificate,
     (inquiryCertificate) => inquiryCertificate.certificate,

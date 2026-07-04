@@ -66,6 +66,15 @@ export class Product {
   @Column({ type: "text", nullable: true })
   description!: string | null;
 
+  @Column({ type: "varchar", length: 400, nullable: true })
+  shortDescription!: string | null;
+
+  @Column({ type: "varchar", length: 500, nullable: true })
+  thumbnailUrl!: string | null;
+
+  @Column({ type: "varchar", length: 500, nullable: true })
+  imageUrl!: string | null;
+
   @Column({ type: "varchar", length: 80, nullable: true })
   hsCode!: string | null;
 

@@ -19,6 +19,8 @@ import {
   ProductSummaryDto,
   ProductTradeTermSummaryDto,
   ProductCategorySummaryDto,
+  ProductFaqSummaryDto,
+  ProductCertificateSummaryDto,
 } from "./dto/product-response.dto";
 import {
   ProductAttribute,
@@ -28,6 +30,8 @@ import { ProductAttributeMapping } from "./entities/product-attribute-mapping.en
 import { ProductAttributeOption } from "./entities/product-attribute-option.entity";
 import { ProductContainerConfig } from "./entities/product-container-config.entity";
 import { Product, ProductStatus } from "./entities/product.entity";
+import { ProductFaq } from "./entities/product-faq.entity";
+import { ProductCertificate } from "./entities/product-certificate.entity";
 import { ProductTradeTerm } from "./entities/product-trade-term.entity";
 import { TradeTerm } from "./entities/trade-term.entity";
 import { ProductCategory } from "./entities/product-category.entity";
@@ -171,6 +175,9 @@ export class ProductsService {
       metaDescription: product.metaDescription,
       focusKeyword: product.focusKeyword,
       description: product.description,
+      shortDescription: product.shortDescription,
+      thumbnailUrl: product.thumbnailUrl,
+      imageUrl: product.imageUrl,
       hsCode: product.hsCode,
       origin: product.origin,
       exportPort: product.exportPort,
@@ -278,6 +285,26 @@ export class ProductsService {
     };
   }
 
+  private toFaqDto(faq: ProductFaq): ProductFaqSummaryDto {
+    return {
+      id: faq.id,
+      question: faq.question,
+      answer: faq.answer,
+      sortOrder: faq.sortOrder,
+    };
+  }
+
+  private toCertificateDto(
+    cert: ProductCertificate,
+  ): ProductCertificateSummaryDto {
+    return {
+      id: cert.id,
+      name: cert.certificate?.name ?? "",
+      status: cert.certificate?.status ?? null,
+      fileUrl: cert.certificate?.fileUrl ?? null,
+    };
+  }
+
   private toDetailDto(product: Product): ProductDetailDto {
     return {
       ...this.toSummaryDto(product),
@@ -296,6 +323,14 @@ export class ProductsService {
         .slice()
         .sort((a, b) => a.sortOrder - b.sortOrder)
         .map((tradeTerm) => this.toTradeTermDto(tradeTerm)),
+      faqs: (product.faqs ?? [])
+        .slice()
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((faq) => this.toFaqDto(faq)),
+      certificates: (product.certificates ?? [])
+        .slice()
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((cert) => this.toCertificateDto(cert)),
     };
   }
 
@@ -337,6 +372,8 @@ export class ProductsService {
         attributeMappings: { attribute: true, defaultOption: true },
         containerConfigs: true,
         tradeTerms: { tradeTerm: true },
+        faqs: true,
+        certificates: { certificate: true },
       },
     });
 

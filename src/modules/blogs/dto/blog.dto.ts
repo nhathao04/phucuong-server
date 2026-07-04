@@ -69,6 +69,47 @@ export class CreateBlogDto {
   thumbnailUrl?: string | null;
 
   @ApiPropertyOptional({
+    example: "https://cdn.example.com/images/cashew-blog-cover.jpg",
+    description: "Full-width cover image shown at the top of the article.",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  coverImageUrl?: string | null;
+
+  @ApiPropertyOptional({
+    example: "<h2>Start with the product use case</h2><p>...</p>",
+    description: "Sanitized HTML for frontend render.",
+  })
+  @IsOptional()
+  @IsString()
+  contentHtml?: string | null;
+
+  @ApiPropertyOptional({
+    type: "object",
+    additionalProperties: true,
+    description: "ProseMirror/Tiptap JSON – source of truth for the editor.",
+    example: { type: "doc", content: [] },
+  })
+  @IsOptional()
+  contentJson?: Record<string, unknown> | null;
+
+  @ApiPropertyOptional({
+    example:
+      "Start with the product use case. Define application and packaging clearly.",
+    description: "Plain text for search/SEO/excerpt fallback.",
+  })
+  @IsOptional()
+  @IsString()
+  contentText?: string | null;
+
+  @ApiPropertyOptional({ example: 5 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  readTimeMinutes?: number | null;
+
+  @ApiPropertyOptional({
     example: "Top 5 Benefits of Organic Cashew Nuts | Blog",
   })
   @IsOptional()
@@ -134,10 +175,24 @@ export class UpdateBlogDto {
   @IsString()
   excerpt?: string | null;
 
-  @ApiPropertyOptional({ example: "<p>Updated content...</p>" })
+  @ApiPropertyOptional({ example: "<h2>Updated content</h2><p>...</p>" })
   @IsOptional()
   @IsString()
-  content?: string | null;
+  contentHtml?: string | null;
+
+  @ApiPropertyOptional({
+    type: "object",
+    additionalProperties: true,
+    description: "ProseMirror/Tiptap JSON.",
+    example: { type: "doc", content: [] },
+  })
+  @IsOptional()
+  contentJson?: Record<string, unknown> | null;
+
+  @ApiPropertyOptional({ example: "Updated plain text content." })
+  @IsOptional()
+  @IsString()
+  contentText?: string | null;
 
   @ApiPropertyOptional({
     example: "https://cdn.example.com/images/updated.jpg",
@@ -146,6 +201,20 @@ export class UpdateBlogDto {
   @IsString()
   @MaxLength(500)
   thumbnailUrl?: string | null;
+
+  @ApiPropertyOptional({
+    example: "https://cdn.example.com/images/updated-cover.jpg",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  coverImageUrl?: string | null;
+
+  @ApiPropertyOptional({ example: 5 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  readTimeMinutes?: number | null;
 
   @ApiPropertyOptional({ example: "Updated SEO Title" })
   @IsOptional()

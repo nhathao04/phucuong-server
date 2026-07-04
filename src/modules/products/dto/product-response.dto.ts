@@ -161,6 +161,19 @@ export class ProductSummaryDto {
   })
   description!: string | null;
 
+  @ApiPropertyOptional({ example: "Export-ready cashew nuts from Vietnam." })
+  shortDescription!: string | null;
+
+  @ApiPropertyOptional({
+    example: "https://cdn.example.com/products/cashew-thumb.webp",
+  })
+  thumbnailUrl!: string | null;
+
+  @ApiPropertyOptional({
+    example: "https://cdn.example.com/products/cashew-hero.webp",
+  })
+  imageUrl!: string | null;
+
   @ApiPropertyOptional({ example: "draft", enum: ProductStatus })
   status!: ProductStatus;
 
@@ -218,6 +231,36 @@ export class ProductListItemDto extends ProductSummaryDto {
   tradeTerms!: ProductTradeTermSummaryDto[];
 }
 
+export class ProductFaqSummaryDto {
+  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
+  id!: string;
+
+  @ApiProperty({ example: "What is the MOQ?" })
+  question!: string;
+
+  @ApiProperty({ example: "The typical MOQ is 1 container." })
+  answer!: string;
+
+  @ApiProperty({ example: 0 })
+  sortOrder!: number;
+}
+
+export class ProductCertificateSummaryDto {
+  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
+  id!: string;
+
+  @ApiProperty({ example: "ISO 9001:2015" })
+  name!: string;
+
+  @ApiPropertyOptional({ example: "available" })
+  status!: string | null;
+
+  @ApiPropertyOptional({
+    example: "https://cdn.example.com/certificates/iso-9001.pdf",
+  })
+  fileUrl!: string | null;
+}
+
 export class ProductDetailDto extends ProductSummaryDto {
   @ApiProperty({ type: [ProductCountryConfigSummaryDto] })
   countryConfigs!: ProductCountryConfigSummaryDto[];
@@ -230,6 +273,12 @@ export class ProductDetailDto extends ProductSummaryDto {
 
   @ApiProperty({ type: [ProductTradeTermSummaryDto] })
   tradeTerms!: ProductTradeTermSummaryDto[];
+
+  @ApiProperty({ type: [ProductFaqSummaryDto] })
+  faqs!: ProductFaqSummaryDto[];
+
+  @ApiProperty({ type: [ProductCertificateSummaryDto] })
+  certificates!: ProductCertificateSummaryDto[];
 }
 
 export class ProductListResponseDto {
