@@ -1,12 +1,14 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
+
 import { InquiriesController } from "./inquiries.controller";
+import { StaffInquiriesController } from "./inquiries-admin.controller";
 import { InquiriesService } from "./inquiries.service";
+import { InquiriesAdminService } from "./inquiries-admin.service";
+
 import { Inquiry } from "./entities/inquiry.entity";
-import { Customer } from "../customers/entities/customer.entity";
-import { Product } from "../products/entities/product.entity";
-import { Country } from "../geography/entities/country.entity";
-import { Port } from "../geography/entities/port.entity";
+import { InquiryActivity } from "./entities/inquiry-activity.entity";
+import { InquiryAssignment } from "./entities/inquiry-assignment.entity";
 import { InquiryStepEvent } from "./entities/inquiry-step-event.entity";
 import { InquiryProduct } from "./entities/inquiry-product.entity";
 import { InquiryCommercial } from "./entities/inquiry-commercial.entity";
@@ -15,14 +17,29 @@ import { InquiryCertificate } from "./entities/inquiry-certificate.entity";
 import { Notification } from "./entities/notification.entity";
 import { EmailOutbox } from "./entities/email-outbox.entity";
 
+import { Customer } from "../customers/entities/customer.entity";
+import { Product } from "../products/entities/product.entity";
+import { ProductContainerConfig } from "../products/entities/product-container-config.entity";
+import { ProductCountryConfig } from "../products/entities/product-country-config.entity";
+import { Country } from "../geography/entities/country.entity";
+import { Port } from "../geography/entities/port.entity";
+import { User } from "../users/entities/user.entity";
+import { UsersModule } from "../users/users.module";
+import { MailModule } from "../mail/mail.module";
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       Inquiry,
       Customer,
       Product,
+      ProductContainerConfig,
+      ProductCountryConfig,
       Country,
       Port,
+      User,
+      InquiryActivity,
+      InquiryAssignment,
       InquiryStepEvent,
       InquiryProduct,
       InquiryCommercial,
@@ -31,9 +48,11 @@ import { EmailOutbox } from "./entities/email-outbox.entity";
       Notification,
       EmailOutbox,
     ]),
+    UsersModule,
+    MailModule,
   ],
-  controllers: [InquiriesController],
-  providers: [InquiriesService],
-  exports: [InquiriesService],
+  controllers: [InquiriesController, StaffInquiriesController],
+  providers: [InquiriesService, InquiriesAdminService],
+  exports: [InquiriesService, InquiriesAdminService],
 })
 export class InquiriesModule {}

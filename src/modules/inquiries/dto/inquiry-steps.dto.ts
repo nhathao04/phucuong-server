@@ -256,7 +256,51 @@ export class InquiryCreatedResponseDto {
   internalEmailSent!: boolean;
 }
 
+export class InquiryCalculationDto {
+  @ApiPropertyOptional({
+    example: 2,
+    description: "Number of containers required (ceil(quantity / containerCapacity))",
+  })
+  estimatedContainers!: number | null;
+
+  @ApiPropertyOptional({ example: "40HQ" })
+  containerCode!: string | null;
+
+  @ApiPropertyOptional({ example: "40' High Cube Dry Container" })
+  containerName!: string | null;
+
+  @ApiPropertyOptional({ example: 28.5, description: "Capacity of the chosen container (MT)" })
+  containerCapacityMt!: number | null;
+
+  @ApiPropertyOptional({ example: 20, description: "Minimum order quantity (MT)" })
+  moqMt!: number | null;
+
+  @ApiPropertyOptional({ example: "20 MT", description: "Human-readable MOQ label from CMS" })
+  moqLabel!: string | null;
+
+  @ApiProperty({
+    enum: ["ok", "below_moq", "no_moq_config"],
+    example: "ok",
+    description:
+      "ok = quantity >= MOQ, below_moq = quantity < MOQ, no_moq_config = MOQ not configured for this product/country",
+  })
+  moqStatus!: "ok" | "below_moq" | "no_moq_config";
+
+  @ApiProperty({
+    example: true,
+    description: "True when MOQ status is not 'below_moq'",
+  })
+  isValid!: boolean;
+}
+
 export class InquiryStepSavedResponseDto extends InquiryCreatedResponseDto {
   @ApiProperty({ example: 2 })
   savedStep!: number;
+
+  @ApiPropertyOptional({
+    description:
+      "Auto-computed product calculation (Container Qty + MOQ Status) returned on Step 2.",
+    type: InquiryCalculationDto,
+  })
+  calculation?: InquiryCalculationDto | null;
 }

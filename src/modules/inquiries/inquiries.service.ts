@@ -13,6 +13,8 @@ import {
 } from "./entities/inquiry.enums";
 import { Customer } from "../customers/entities/customer.entity";
 import { Product } from "../products/entities/product.entity";
+import { ProductContainerConfig } from "../products/entities/product-container-config.entity";
+import { ProductCountryConfig } from "../products/entities/product-country-config.entity";
 import { Country } from "../geography/entities/country.entity";
 import { Port } from "../geography/entities/port.entity";
 import { InquiryStepEvent } from "./entities/inquiry-step-event.entity";
@@ -30,6 +32,7 @@ import {
   InquiryStep4Dto,
   InquiryCreatedResponseDto,
   InquiryStepSavedResponseDto,
+  InquiryCalculationDto,
 } from "./dto/inquiry-steps.dto";
 
 @Injectable()
@@ -41,6 +44,10 @@ export class InquiriesService {
     private readonly customerRepo: Repository<Customer>,
     @InjectRepository(Product)
     private readonly productRepo: Repository<Product>,
+    @InjectRepository(ProductContainerConfig)
+    private readonly productContainerConfigRepo: Repository<ProductContainerConfig>,
+    @InjectRepository(ProductCountryConfig)
+    private readonly productCountryConfigRepo: Repository<ProductCountryConfig>,
     @InjectRepository(Country)
     private readonly countryRepo: Repository<Country>,
     @InjectRepository(Port)
@@ -159,6 +166,15 @@ export class InquiriesService {
         dto.destinationPortId ?? inquiry.destinationPortId,
       );
 
+      // ── Auto calculation: Container + MOQ ─────────────────────────────────
+      const countryId =
+        dto.destinationCountryId ?? inquiry.destinationCountryId ?? null;
+      const quantity = Number(dto.quantity);
+
+      const container = await this.resolveContainerConfig(manager, dto.productId);
+      const moq = await this.resolveMoqMt(manager, dto.productId, product, countryId);
+      const calculation = this.computeProductCalculation(quantity, container, moq);
+
       // Upsert inquiry product
       const ipRepo = manager.getRepository(InquiryProduct);
       let inquiryProduct = await ipRepo.findOne({
@@ -166,20 +182,21 @@ export class InquiriesService {
         relations: { attributes: true },
       });
 
+      const productFields = {
+        productId: dto.productId,
+        quantityMt: dto.quantity ? String(dto.quantity) : null,
+        sampleRequired: dto.sampleRequest ?? false,
+        estimatedContainer: calculation.estimatedContainers
+          ? String(calculation.estimatedContainers)
+          : null,
+        moqStatus: calculation.moqStatus,
+      };
+
       if (!inquiryProduct) {
-        inquiryProduct = ipRepo.create({
-          inquiryId,
-          productId: dto.productId,
-          quantityMt: dto.quantity ? String(dto.quantity) : null,
-          sampleRequired: dto.sampleRequest ?? false,
-        });
+        inquiryProduct = ipRepo.create({ inquiryId, ...productFields });
         await ipRepo.save(inquiryProduct);
       } else {
-        await ipRepo.update(inquiryProduct.id, {
-          productId: dto.productId,
-          quantityMt: dto.quantity ? String(dto.quantity) : null,
-          sampleRequired: dto.sampleRequest ?? false,
-        });
+        await ipRepo.update(inquiryProduct.id, productFields);
       }
 
       // Resolve destination from dto or keep existing
@@ -191,6 +208,10 @@ export class InquiriesService {
         formStatus: InquiryFormStatus.DRAFT_STEP_2,
         step2CompletedAt: new Date(),
         lastStepSavedAt: new Date(),
+        quantity: String(quantity),
+        estimatedContainer: calculation.estimatedContainers
+          ? String(calculation.estimatedContainers)
+          : null,
       });
 
       // Record step event
@@ -199,6 +220,7 @@ export class InquiriesService {
         productName: product.name,
         quantity: dto.quantity,
         sampleRequest: dto.sampleRequest,
+        calculation,
       });
 
       // Send internal email for step 2
@@ -225,6 +247,7 @@ export class InquiriesService {
         customerEmailSent: updated.customerEmailSent,
         internalEmailSent: internalSent,
         savedStep: 2,
+        calculation,
       };
     });
   }
@@ -478,6 +501,81 @@ export class InquiriesService {
     }
 
     return `${prefix}${String(seq).padStart(4, "0")}`;
+  }
+
+  // ── Auto calculation: Container Qty + MOQ Validation ──────────────────────
+  // Pick the default container config for the product (or smallest if none flagged).
+  // Falls back to product.quoteConfig.moq if no country-level config exists.
+  private async resolveContainerConfig(
+    manager: EntityManager,
+    productId: string,
+  ): Promise<ProductContainerConfig | null> {
+    const repo = manager.getRepository(ProductContainerConfig);
+    const defaultCfg = await repo.findOne({
+      where: { productId, isDefault: true },
+    });
+    if (defaultCfg) return defaultCfg;
+
+    return repo
+      .createQueryBuilder("c")
+      .where("c.productId = :productId", { productId })
+      .orderBy("c.capacityMt", "ASC")
+      .getOne();
+  }
+
+  // Returns the country-specific MOQ (or falls back to product.quoteConfig.moq).
+  private async resolveMoqMt(
+    manager: EntityManager,
+    productId: string,
+    product: Product,
+    destinationCountryId: string | null | undefined,
+  ): Promise<{ moqMt: number | null; moqLabel: string | null }> {
+    if (destinationCountryId) {
+      const countryCfg = await manager
+        .getRepository(ProductCountryConfig)
+        .findOne({ where: { productId, countryId: destinationCountryId } });
+      if (countryCfg?.moqMt) {
+        return { moqMt: Number(countryCfg.moqMt), moqLabel: countryCfg.moqLabel ?? null };
+      }
+    }
+
+    const fallback = product.quoteConfig?.moq;
+    if (fallback) {
+      const parsed = parseFloat(fallback);
+      if (!isNaN(parsed) && parsed > 0) {
+        return { moqMt: parsed, moqLabel: fallback };
+      }
+    }
+
+    return { moqMt: null, moqLabel: null };
+  }
+
+  private computeProductCalculation(
+    quantityMt: number,
+    container: ProductContainerConfig | null,
+    moq: { moqMt: number | null; moqLabel: string | null },
+  ): InquiryCalculationDto {
+    const containerCapacity = container ? Number(container.capacityMt) : 0;
+    const estimatedContainers =
+      containerCapacity > 0
+        ? Math.max(1, Math.ceil(quantityMt / containerCapacity))
+        : null;
+
+    let moqStatus: "ok" | "below_moq" | "no_moq_config" = "no_moq_config";
+    if (moq.moqMt !== null) {
+      moqStatus = quantityMt >= moq.moqMt ? "ok" : "below_moq";
+    }
+
+    return {
+      estimatedContainers,
+      containerCode: container?.containerCode ?? null,
+      containerName: container?.containerName ?? null,
+      containerCapacityMt: container ? containerCapacity : null,
+      moqMt: moq.moqMt,
+      moqLabel: moq.moqLabel,
+      moqStatus,
+      isValid: moqStatus !== "below_moq",
+    };
   }
 
   private async recordStepEvent(
