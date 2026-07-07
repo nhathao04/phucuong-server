@@ -50,6 +50,9 @@ export class InquiryProductAttribute {
   @Column({ type: "text", nullable: true })
   valueText!: string | null;
 
+  @Column({ type: "varchar", length: 500, nullable: true })
+  customValue!: string | null;
+
   @Column({ type: "jsonb", nullable: true })
   valueJson!: Record<string, unknown> | null;
 

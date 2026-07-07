@@ -55,6 +55,16 @@ export class InquiryStep1Dto {
   @MaxLength(50)
   whatsappNumber?: string | null;
 
+  @ApiProperty({
+    example: "uuid-of-product",
+    description:
+      "Product the buyer is interested in. Required at Step 1 so the inquiry is " +
+      "bound to a single product from the start — Step 2 then only collects " +
+      "quantity, sample request and product-specific attributes for this product.",
+  })
+  @IsUUID()
+  productId!: string;
+
   @ApiPropertyOptional({ example: "uuid-of-destination-country" })
   @IsOptional()
   @IsUUID()
@@ -83,21 +93,46 @@ export class InquiryAttributeValueDto {
   @MaxLength(100)
   attributeCode?: string;
 
-  @ApiPropertyOptional({ example: "Ben Tre, Vietnam" })
+  @ApiPropertyOptional({
+    example: 34,
+    description:
+      "ID of the option the buyer picked. When the option has isCustomTrigger=true, customValue becomes required.",
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  optionId?: number | null;
+
+  @ApiPropertyOptional({
+    example: "Ben Tre, Vietnam",
+    description:
+      "Display value — either the option's value (resolved server-side from optionId) or a free-form string for text-type attributes.",
+  })
   @IsOptional()
   @IsString()
   @MaxLength(500)
   value?: string | null;
+
+  @ApiPropertyOptional({
+    example: "14 cm diameter",
+    description:
+      "Buyer-supplied custom text. Required when the selected option has isCustomTrigger=true; otherwise ignored.",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  customValue?: string | null;
 }
 
 export class InquiryStep2Dto {
-  @ApiProperty({ example: "uuid-of-inquiry-from-step-1" })
+  @ApiProperty({
+    example: "uuid-of-inquiry-from-step-1",
+    description:
+      "The product is bound to the inquiry at Step 1 — Step 2 only needs the " +
+      "inquiryId so the server can look up which product to validate against.",
+  })
   @IsUUID()
   inquiryId!: string;
-
-  @ApiProperty({ example: "uuid-of-product" })
-  @IsUUID()
-  productId!: string;
 
   @ApiProperty({ example: 20, description: "Quantity in MT" })
   @IsNumber()
@@ -111,7 +146,7 @@ export class InquiryStep2Dto {
   @ApiPropertyOptional({
     type: [InquiryAttributeValueDto],
     description:
-      "Product-specific attribute values for this inquiry. Attributes are loaded dynamically based on the selected product.",
+      "Product-specific attribute values for this inquiry. Attributes are loaded dynamically based on the product selected in Step 1.",
   })
   @IsOptional()
   @IsArray()
@@ -131,7 +166,7 @@ export class InquiryStep2Dto {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STEP 3 — Commercial Terms
+// STEP 3 — Commercial Terms + Requirements (certificates + free text)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export class InquiryStep3Dto {
@@ -156,32 +191,45 @@ export class InquiryStep3Dto {
   @IsOptional()
   @IsDateString()
   expectedDeliveryDate?: string | null;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// STEP 4 — Requirements & Submit
-// ─────────────────────────────────────────────────────────────────────────────
-
-export class InquiryStep4Dto {
-  @ApiProperty({ example: "uuid-of-inquiry" })
-  @IsUUID()
-  inquiryId!: string;
 
   @ApiPropertyOptional({
     type: [String],
     example: ["uuid-of-cert-1", "uuid-of-cert-2"],
-    description: "IDs of required certificates",
+    description:
+      "Certificate IDs the buyer requires (FDA, HACCP, Organic, …). " +
+      "Stored in inquiry_certificates when present.",
   })
   @IsOptional()
   @IsArray()
   @IsUUID("4", { each: true })
   certificateRequired?: string[];
 
-  @ApiPropertyOptional({ example: "Need special packaging for retail distribution." })
+  @ApiPropertyOptional({
+    example: "Need special packaging for retail distribution.",
+    description:
+      "Any extra notes — labelling, retail kitting, private-label brand, " +
+      "shipping marks. Stored on the requirement record and copied to inquiry.notes.",
+  })
   @IsOptional()
   @IsString()
   @MaxLength(2000)
   additionalRequirements?: string | null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP 4 — Review & Submit (no fields, server finalises the inquiry)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export class InquiryStep4Dto {
+  @ApiProperty({
+    example: "uuid-of-inquiry",
+    description:
+      "ID of the inquiry to submit. Step 4 is review-only — the buyer has " +
+      "already filled everything in Steps 1-3; calling this endpoint finalises " +
+      "the inquiry and triggers customer + internal emails.",
+  })
+  @IsUUID()
+  inquiryId!: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

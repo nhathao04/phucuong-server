@@ -11,14 +11,18 @@ import { InquiryActivity } from "./entities/inquiry-activity.entity";
 import { InquiryAssignment } from "./entities/inquiry-assignment.entity";
 import { InquiryStepEvent } from "./entities/inquiry-step-event.entity";
 import { InquiryProduct } from "./entities/inquiry-product.entity";
+import { InquiryProductAttribute } from "./entities/inquiry-product-attribute.entity";
 import { InquiryCommercial } from "./entities/inquiry-commercial.entity";
 import { InquiryRequirement } from "./entities/inquiry-requirement.entity";
 import { InquiryCertificate } from "./entities/inquiry-certificate.entity";
+import { Certificate } from "./entities/certificate.entity";
 import { Notification } from "./entities/notification.entity";
 import { EmailOutbox } from "./entities/email-outbox.entity";
 
 import { Customer } from "../customers/entities/customer.entity";
 import { Product } from "../products/entities/product.entity";
+import { ProductAttribute } from "../products/entities/product-attribute.entity";
+import { ProductAttributeOption } from "../products/entities/product-attribute-option.entity";
 import { ProductContainerConfig } from "../products/entities/product-container-config.entity";
 import { ProductCountryConfig } from "../products/entities/product-country-config.entity";
 import { Country } from "../geography/entities/country.entity";
@@ -42,11 +46,15 @@ import { MailModule } from "../mail/mail.module";
       InquiryAssignment,
       InquiryStepEvent,
       InquiryProduct,
+      InquiryProductAttribute,
       InquiryCommercial,
       InquiryRequirement,
       InquiryCertificate,
+      Certificate,
       Notification,
       EmailOutbox,
+      ProductAttribute,
+      ProductAttributeOption,
     ]),
     UsersModule,
     MailModule,

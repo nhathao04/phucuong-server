@@ -34,6 +34,12 @@ import {
   ProductHeroStatDto,
   ProductListItemDto,
   ProductListResponseDto,
+  ProductOrderConfigDto,
+  InquiryOrderAttributeMappingDto,
+  InquiryOrderAttributeOptionDto,
+  InquiryOrderContainerConfigDto,
+  InquiryOrderCountryConfigDto,
+  InquiryOrderTradeTermDto,
   ProductPackagingOptionDto,
   ProductQuoteConfigDto,
   ProductQuoteConfigFieldDto,
@@ -1629,5 +1635,157 @@ export class ProductsService {
 
     const detailProduct = await this.loadProductForDetail(product.id);
     return this.toDetailDto(detailProduct);
+  }
+
+  // ── Inquiry Order Config ──────────────────────────────────────────────────
+  // Trimmed payload: only the fields needed to build the Step 2 / Step 3 form
+  // on the public inquiry page, plus MOQ + container configs for auto-calc.
+
+  async getOrderConfig(identifier: string): Promise<ProductOrderConfigDto> {
+    const detail = await this.loadProductDetail(identifier, { includeDraft: true });
+    return this.toOrderConfigDto(detail);
+  }
+
+  async getPublicOrderConfig(identifier: string): Promise<ProductOrderConfigDto> {
+    const detail = await this.loadProductDetail(identifier, {
+      includeDraft: false,
+    });
+    return this.toOrderConfigDto(detail);
+  }
+
+  private async loadProductDetail(
+    identifier: string,
+    opts: { includeDraft: boolean },
+  ): Promise<Product> {
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        identifier,
+      );
+
+    const baseWhere = isUuid ? { id: identifier } : { slug: identifier };
+    const where = opts.includeDraft
+      ? baseWhere
+      : { ...baseWhere, status: ProductStatus.PUBLISHED, isActive: true };
+
+    const product = await this.productsRepository.findOne({ where });
+    if (!product) {
+      throw new NotFoundException("Product not found");
+    }
+
+    return (await this.productsRepository
+      .createQueryBuilder("product")
+      .leftJoinAndSelect(
+        "product.attributeMappings",
+        "attributeMappings",
+      )
+      .leftJoinAndSelect("attributeMappings.attribute", "attribute")
+      .leftJoinAndSelect(
+        "attributeMappings.defaultOption",
+        "defaultOption",
+      )
+      .leftJoinAndSelect("attribute.options", "attrOption")
+      .leftJoinAndSelect("product.containerConfigs", "containerConfigs")
+      .leftJoinAndSelect("product.countryConfigs", "countryConfigs")
+      .leftJoinAndSelect("countryConfigs.country", "country")
+      .leftJoinAndSelect("product.tradeTerms", "tradeTerms")
+      .leftJoinAndSelect("tradeTerms.tradeTerm", "tradeTerm")
+      .where("product.id = :id", { id: product.id })
+      .orderBy("attributeMappings.sortOrder", "ASC")
+      .addOrderBy("attrOption.sortOrder", "ASC")
+      .getOne()) as Product;
+  }
+
+  private toOrderConfigDto(product: Product): ProductOrderConfigDto {
+    // Public-facing endpoint — hide attributes that staff marked as
+    // isInquiryField=false (catalog-only, e.g. internal SKUs / spec notes).
+    const mappings: InquiryOrderAttributeMappingDto[] = (
+      product.attributeMappings ?? []
+    )
+      .filter(
+        (mapping) => mapping.attribute?.isInquiryField !== false,
+      )
+      .slice()
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((mapping): InquiryOrderAttributeMappingDto => ({
+        id: mapping.id,
+        attributeId: mapping.attributeId,
+        code: mapping.attribute?.code ?? "",
+        name: mapping.attribute?.name ?? "",
+        groupKey: mapping.attribute?.groupKey ?? "other",
+        type: mapping.attribute?.type ?? "text",
+        unit: mapping.attribute?.unit ?? null,
+        defaultValue: mapping.attribute?.defaultValue ?? null,
+        placeholder: mapping.attribute?.placeholder ?? null,
+        footnote: mapping.attribute?.footnote ?? null,
+        required: mapping.required,
+        isInquiryField: mapping.attribute?.isInquiryField ?? true,
+        sortOrder: mapping.sortOrder,
+        defaultOptionId: mapping.defaultOptionId ?? null,
+        options: (mapping.attribute?.options ?? [])
+          .slice()
+          .sort((a, b) => a.sortOrder - b.sortOrder)
+          .map(
+            (option): InquiryOrderAttributeOptionDto => ({
+              id: option.id,
+              value: option.value,
+              sortOrder: option.sortOrder,
+              isActive: option.isActive,
+              isCustomTrigger: option.isCustomTrigger ?? false,
+              customPlaceholder: option.customPlaceholder ?? null,
+            }),
+          ),
+      }));
+
+    const containers: InquiryOrderContainerConfigDto[] = (
+      product.containerConfigs ?? []
+    )
+      .slice()
+      .sort((a, b) => Number(a.capacityMt) - Number(b.capacityMt))
+      .map((config): InquiryOrderContainerConfigDto => ({
+        id: config.id,
+        containerCode: config.containerCode,
+        containerName: config.containerName,
+        capacityMt: String(config.capacityMt),
+        isDefault: config.isDefault,
+      }));
+
+    const countries: InquiryOrderCountryConfigDto[] = (
+      product.countryConfigs ?? []
+    )
+      .slice()
+      .filter((cfg) => cfg.isActive)
+      .map((cfg): InquiryOrderCountryConfigDto => ({
+        countryId: cfg.countryId,
+        countryCode: cfg.country?.code ?? "",
+        countryName: cfg.country?.name ?? "",
+        moqMt: cfg.moqMt ? String(cfg.moqMt) : null,
+        moqLabel: cfg.moqLabel ?? null,
+        leadTimeDays: cfg.leadTimeDays ?? null,
+        isActive: cfg.isActive,
+      }));
+
+    const tradeTerms: InquiryOrderTradeTermDto[] = (product.tradeTerms ?? [])
+      .map(
+        (pt): InquiryOrderTradeTermDto => ({
+          id: pt.id,
+          code: pt.tradeTerm?.code ?? "",
+          name: pt.tradeTerm?.name ?? "",
+          isActive: pt.tradeTerm?.isActive ?? true,
+          isDefault: pt.isDefault,
+        }),
+      )
+      .filter((term) => term.isActive)
+      .sort((a, b) => a.code.localeCompare(b.code));
+
+    return {
+      productId: product.id,
+      productName: product.name,
+      productSlug: product.slug,
+      productCode: product.productCode ?? null,
+      attributeMappings: mappings,
+      containerConfigs: containers,
+      countryConfigs: countries,
+      tradeTerms,
+    };
   }
 }

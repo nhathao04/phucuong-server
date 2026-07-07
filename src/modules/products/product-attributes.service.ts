@@ -32,11 +32,14 @@ const toResponseDto = (
   footnote: entity.footnote,
   sectionLabel: entity.sectionLabel,
   isActive: entity.isActive,
+  isInquiryField: entity.isInquiryField ?? true,
   options: options.map((option) => ({
     id: option.id,
     value: option.value,
     sortOrder: option.sortOrder,
     isActive: option.isActive,
+    isCustomTrigger: option.isCustomTrigger ?? false,
+    customPlaceholder: option.customPlaceholder ?? null,
   })),
   createdAt: entity.createdAt,
   updatedAt: entity.updatedAt,
@@ -101,6 +104,7 @@ export class ProductAttributesService {
           footnote: dto.footnote ?? null,
           sectionLabel: dto.sectionLabel ?? null,
           isActive: dto.isActive ?? true,
+          isInquiryField: dto.isInquiryField ?? true,
         });
         const savedAttribute = await attributeRepository.save(attribute);
 
@@ -158,6 +162,8 @@ export class ProductAttributesService {
     if (dto.sectionLabel !== undefined)
       attribute.sectionLabel = dto.sectionLabel;
     if (dto.isActive !== undefined) attribute.isActive = dto.isActive;
+    if (dto.isInquiryField !== undefined)
+      attribute.isInquiryField = dto.isInquiryField;
 
     await this.attributeRepository.save(attribute);
     return this.getDetail(attribute.code);
@@ -195,6 +201,8 @@ export class ProductAttributesService {
       attributeId: attribute.id,
       value,
       sortOrder: dto.sortOrder ?? (lastSort?.sortOrder ?? -1) + 1,
+      isCustomTrigger: dto.isCustomTrigger ?? false,
+      customPlaceholder: dto.customPlaceholder ?? null,
     });
     await this.optionRepository.save(option);
     return this.getDetail(attribute.code);
@@ -215,6 +223,10 @@ export class ProductAttributesService {
     if (dto.value !== undefined) option.value = dto.value.trim();
     if (dto.sortOrder !== undefined) option.sortOrder = dto.sortOrder;
     if (dto.isActive !== undefined) option.isActive = dto.isActive;
+    if (dto.isCustomTrigger !== undefined)
+      option.isCustomTrigger = dto.isCustomTrigger;
+    if (dto.customPlaceholder !== undefined)
+      option.customPlaceholder = dto.customPlaceholder;
     await this.optionRepository.save(option);
     return this.getDetail(attribute.code);
   }

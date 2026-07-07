@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, EntityManager } from "typeorm";
+import { Repository, EntityManager, In } from "typeorm";
 import { Inquiry } from "./entities/inquiry.entity";
 import {
   InquiryFormStatus,
@@ -13,15 +13,19 @@ import {
 } from "./entities/inquiry.enums";
 import { Customer } from "../customers/entities/customer.entity";
 import { Product } from "../products/entities/product.entity";
+import { ProductAttribute } from "../products/entities/product-attribute.entity";
+import { ProductAttributeOption } from "../products/entities/product-attribute-option.entity";
 import { ProductContainerConfig } from "../products/entities/product-container-config.entity";
 import { ProductCountryConfig } from "../products/entities/product-country-config.entity";
 import { Country } from "../geography/entities/country.entity";
 import { Port } from "../geography/entities/port.entity";
 import { InquiryStepEvent } from "./entities/inquiry-step-event.entity";
 import { InquiryProduct } from "./entities/inquiry-product.entity";
+import { InquiryProductAttribute } from "./entities/inquiry-product-attribute.entity";
 import { InquiryCommercial } from "./entities/inquiry-commercial.entity";
 import { InquiryRequirement } from "./entities/inquiry-requirement.entity";
 import { InquiryCertificate } from "./entities/inquiry-certificate.entity";
+import { Certificate } from "./entities/certificate.entity";
 import { Notification } from "./entities/notification.entity";
 import { EmailOutbox } from "./entities/email-outbox.entity";
 import { MailService, EmailType } from "../mail/mail.service";
@@ -79,6 +83,16 @@ export class InquiriesService {
       // Validate country / port if provided
       await this.validateGeo(manager, dto.destinationCountryId, dto.destinationPortId);
 
+      // Validate product exists and is purchasable. Step 1 binds the
+      // inquiry to a single product — Step 2 will only collect
+      // quantity + attributes for this product.
+      const product = await manager.getRepository(Product).findOne({
+        where: { id: dto.productId },
+      });
+      if (!product) {
+        throw new NotFoundException(`Product ${dto.productId} not found`);
+      }
+
       // Find or create customer by email
       const customer = await this.findOrCreateCustomer(manager, dto);
 
@@ -94,6 +108,7 @@ export class InquiriesService {
         whatsapp: dto.whatsappNumber ?? null,
         companyName: dto.companyName ?? null,
         country: dto.whatsappNumber ?? null,
+        productId: dto.productId,
         destinationCountryId: dto.destinationCountryId ?? null,
         destinationPortId: dto.destinationPortId ?? null,
         status: InquiryStatus.DRAFT,
@@ -119,6 +134,8 @@ export class InquiriesService {
         phone: dto.phoneNumber,
         whatsapp: dto.whatsappNumber,
         companyName: dto.companyName,
+        productId: dto.productId,
+        productName: product.name,
       });
 
       // Send internal notification email (admin/sales)
@@ -151,12 +168,18 @@ export class InquiriesService {
     return this.inquiryRepo.manager.transaction(async (manager) => {
       const inquiry = await this.getInquiryOrFail(manager, inquiryId);
 
-      // Validate product
+      // Validate product — comes from Step 1, not Step 2 DTO.
+      if (!inquiry.productId) {
+        throw new BadRequestException(
+          "Inquiry has no product bound. Restart from Step 1 and pick a product.",
+        );
+      }
+      const productId = inquiry.productId;
       const product = await manager.getRepository(Product).findOne({
-        where: { id: dto.productId },
+        where: { id: productId },
       });
       if (!product) {
-        throw new NotFoundException(`Product ${dto.productId} not found`);
+        throw new NotFoundException(`Product ${productId} not found`);
       }
 
       // Validate geo
@@ -171,8 +194,8 @@ export class InquiriesService {
         dto.destinationCountryId ?? inquiry.destinationCountryId ?? null;
       const quantity = Number(dto.quantity);
 
-      const container = await this.resolveContainerConfig(manager, dto.productId);
-      const moq = await this.resolveMoqMt(manager, dto.productId, product, countryId);
+      const container = await this.resolveContainerConfig(manager, productId);
+      const moq = await this.resolveMoqMt(manager, productId, product, countryId);
       const calculation = this.computeProductCalculation(quantity, container, moq);
 
       // Upsert inquiry product
@@ -183,7 +206,7 @@ export class InquiriesService {
       });
 
       const productFields = {
-        productId: dto.productId,
+        productId,
         quantityMt: dto.quantity ? String(dto.quantity) : null,
         sampleRequired: dto.sampleRequest ?? false,
         estimatedContainer: calculation.estimatedContainers
@@ -199,9 +222,19 @@ export class InquiriesService {
         await ipRepo.update(inquiryProduct.id, productFields);
       }
 
+      // Upsert product attributes (Step 2 form selections).
+      // Supports: optionId (catalog selection), customValue (free-form when
+      // optionId points to a custom-trigger option), or value (legacy/text).
+      if (dto.attributes && dto.attributes.length) {
+        await this.upsertInquiryAttributes(
+          manager,
+          inquiryProduct.id,
+          dto.attributes,
+        );
+      }
+
       // Resolve destination from dto or keep existing
       await manager.getRepository(Inquiry).update(inquiryId, {
-        productId: dto.productId,
         destinationCountryId: dto.destinationCountryId ?? inquiry.destinationCountryId,
         destinationPortId: dto.destinationPortId ?? inquiry.destinationPortId,
         currentStep: 2,
@@ -216,7 +249,7 @@ export class InquiriesService {
 
       // Record step event
       await this.recordStepEvent(manager, inquiryId, 2, InquiryAction.CONTINUE, {
-        productId: dto.productId,
+        productId,
         productName: product.name,
         quantity: dto.quantity,
         sampleRequest: dto.sampleRequest,
@@ -252,7 +285,10 @@ export class InquiriesService {
     });
   }
 
-  // ── Public: Save Step 3 (Commercial Terms) ───────────────────────────────
+  // ── Public: Save Step 3 (Commercial Terms + Requirements) ────────────────
+  //
+  // Single endpoint now covers trade/payment/delivery/certificates/notes.
+  // Step 4 is reduced to a review-only submit call.
 
   async saveStep3(
     inquiryId: string,
@@ -262,7 +298,7 @@ export class InquiriesService {
     return this.inquiryRepo.manager.transaction(async (manager) => {
       const inquiry = await this.getInquiryOrFail(manager, inquiryId);
 
-      // Upsert commercial terms
+      // 1) Upsert commercial terms
       const commercialRepo = manager.getRepository(InquiryCommercial);
       let commercial = await commercialRepo.findOne({
         where: { inquiryId },
@@ -284,10 +320,62 @@ export class InquiriesService {
         await commercialRepo.update(commercial.id, commercialData);
       }
 
+      // 2) Upsert requirement row (cert list + free-form notes)
+      const reqRepo = manager.getRepository(InquiryRequirement);
+      let requirement = await reqRepo.findOne({ where: { inquiryId } });
+      const reqData = {
+        certificateRequired: (dto.certificateRequired ?? []).map((id) => ({
+          id,
+        })),
+        additionalRequirements: dto.additionalRequirements
+          ? [{ text: dto.additionalRequirements }]
+          : [],
+      };
+
+      if (!requirement) {
+        requirement = reqRepo.create({ inquiryId, ...reqData });
+        await reqRepo.save(requirement);
+      } else {
+        await reqRepo.update(requirement.id, reqData);
+      }
+
+      // 3) Sync inquiry_certificate rows (replaces previous selection).
+      //    Validate every certificateId exists so FK violations become 400
+      //    rather than opaque 500s on submit.
+      const certRepo = manager.getRepository(InquiryCertificate);
+      const certificateRepo = manager.getRepository(Certificate);
+      if (dto.certificateRequired && dto.certificateRequired.length > 0) {
+        const certIds = Array.from(
+          new Set(dto.certificateRequired),
+        );
+        const found = await certificateRepo.find({
+          where: { id: In(certIds) },
+          select: { id: true },
+        });
+        const foundIds = new Set(found.map((c) => c.id));
+        const missing = certIds.filter((cid) => !foundIds.has(cid));
+        if (missing.length) {
+          throw new BadRequestException(
+            `Certificate(s) not found: ${missing.join(", ")}`,
+          );
+        }
+        await certRepo.delete({ inquiryId });
+        await certRepo.save(
+          certIds.map((certificateId) =>
+            certRepo.create({ inquiryId, certificateId }),
+          ),
+        );
+      } else {
+        await certRepo.delete({ inquiryId });
+      }
+
+      // 4) Persist commercial/requirements on the Inquiry row
+      //    (notes field mirrors additionalRequirements for cross-module reads)
       await manager.getRepository(Inquiry).update(inquiryId, {
         tradeTerm: dto.tradeTerm,
         paymentTerm: dto.paymentTerm ?? null,
         expectedDeliveryDate: dto.expectedDeliveryDate ?? null,
+        notes: dto.additionalRequirements ?? null,
         currentStep: 3,
         formStatus: InquiryFormStatus.DRAFT_STEP_3,
         step3CompletedAt: new Date(),
@@ -298,6 +386,8 @@ export class InquiriesService {
         tradeTerm: dto.tradeTerm,
         paymentTerm: dto.paymentTerm,
         expectedDeliveryDate: dto.expectedDeliveryDate,
+        certificateRequired: dto.certificateRequired ?? [],
+        additionalRequirements: dto.additionalRequirements ?? null,
       });
 
       const updated = await this.reloadInquiry(manager, inquiryId);
@@ -316,50 +406,32 @@ export class InquiriesService {
     });
   }
 
-  // ── Public: Step 4 — Final Submit ─────────────────────────────────────────
+  // ── Public: Step 4 — Final Submit (review-only) ───────────────────────────
+  //
+  // Step 4 no longer carries any input fields — every requirement (certs,
+  // notes, commercial terms) has been captured on Step 3. This endpoint
+  // only validates that Step 1-3 are complete and fires the SUBMIT side
+  // effects (emails, status transition).
 
   async submitStep4(
     inquiryId: string,
-    dto: InquiryStep4Dto,
     meta: { ip?: string; userAgent?: string },
   ): Promise<InquiryStepSavedResponseDto> {
     return this.inquiryRepo.manager.transaction(async (manager) => {
       const inquiry = await this.getInquiryOrFail(manager, inquiryId);
 
-      // Validate step 1 & 2 & 3 are done
+      // Defensive guard: refuse to submit if any prior step is missing.
       if (!inquiry.step1CompletedAt) {
         throw new BadRequestException("Step 1 (customer info) not completed");
       }
-
-      // Upsert requirements
-      const reqRepo = manager.getRepository(InquiryRequirement);
-      let requirement = await reqRepo.findOne({ where: { inquiryId } });
-      const reqData = {
-        certificateRequired: (dto.certificateRequired ?? []).map((id) => ({ id })),
-        additionalRequirements: dto.additionalRequirements
-          ? [{ text: dto.additionalRequirements }]
-          : [],
-      };
-
-      if (!requirement) {
-        requirement = reqRepo.create({ inquiryId, ...reqData });
-        await reqRepo.save(requirement);
-      } else {
-        await reqRepo.update(requirement.id, reqData);
+      if (!inquiry.step2CompletedAt) {
+        throw new BadRequestException("Step 2 (product) not completed");
+      }
+      if (!inquiry.step3CompletedAt) {
+        throw new BadRequestException("Step 3 (commercial terms) not completed");
       }
 
-      // Upsert inquiry certificates
-      if (dto.certificateRequired && dto.certificateRequired.length > 0) {
-        await manager.getRepository(InquiryCertificate).delete({ inquiryId });
-        const certRepo = manager.getRepository(InquiryCertificate);
-        await certRepo.save(
-          dto.certificateRequired.map((certId) =>
-            certRepo.create({ inquiryId, certificateId: certId }),
-          ),
-        );
-      }
-
-      // Finalise inquiry
+      // Finalise inquiry (no upsert here — Step 3 owns the requirement row)
       await manager.getRepository(Inquiry).update(inquiryId, {
         currentStep: 4,
         formStatus: InquiryFormStatus.READY_TO_SUBMIT,
@@ -368,21 +440,26 @@ export class InquiriesService {
         isCompleted: true,
         lastStepSavedAt: new Date(),
         status: InquiryStatus.SUBMITTED,
-        notes: dto.additionalRequirements ?? null,
       });
 
       await this.recordStepEvent(manager, inquiryId, 4, InquiryAction.SUBMIT, {
-        certificates: dto.certificateRequired,
-        additionalRequirements: dto.additionalRequirements,
+        // submit is a no-input step; payload purely mirrors what's already saved
+        certificateCount:
+          (await manager.getRepository(InquiryCertificate).count({
+            where: { inquiryId },
+          })) ?? 0,
       });
 
       const updated = await this.reloadInquiry(manager, inquiryId);
       const customer = updated.customerId
-        ? await manager.getRepository(Customer).findOne({ where: { id: updated.customerId } })
+        ? await manager.getRepository(Customer).findOne({
+            where: { id: updated.customerId },
+          })
         : null;
 
       await this.sendInternalEmail(manager, updated, customer);
-      if (customer) await this.sendCustomerConfirmationEmail(manager, updated, customer);
+      if (customer)
+        await this.sendCustomerConfirmationEmail(manager, updated, customer);
       await this.createAdminNotification(manager, updated, customer, 4);
 
       return {
@@ -723,5 +800,112 @@ export class InquiriesService {
         message: `${customer?.fullName ?? inquiry.fullName ?? "Unknown"} — ${action} inquiry ${inquiry.code ?? inquiry.id}`,
       }),
     );
+  }
+
+  // ── Step 2 attribute persistence ──────────────────────────────────────────
+  // Accepts three payload shapes per attribute:
+  //   1. optionId (catalog selection, e.g. coconut_size id=42)
+  //   2. optionId + customValue (catalog trigger, e.g. optionId=Custom + customValue="14 cm")
+  //   3. value (free-form text/number for text-type attributes, legacy)
+  //
+  // Server-side validation:
+  //   - optionId MUST belong to attributeId/attributeCode
+  //   - When option has isCustomTrigger=true, customValue is required
+  //   - When attribute type is select and optionId is missing → 400
+  //   - When attribute is required (mapping.required) → value OR (optionId + customValue) required
+
+  private async upsertInquiryAttributes(
+    manager: EntityManager,
+    inquiryProductId: number,
+    attributes: {
+      attributeId?: number;
+      attributeCode?: string;
+      optionId?: number | null;
+      value?: string | null;
+      customValue?: string | null;
+    }[],
+  ): Promise<void> {
+    const attributeRepo = manager.getRepository(ProductAttribute);
+    const optionRepo = manager.getRepository(ProductAttributeOption);
+    const attrLinkRepo = manager.getRepository(InquiryProductAttribute);
+
+    // Resolve attributeId for entries that only have attributeCode
+    const codeLookupNeeded = attributes.filter((a) => !a.attributeId && a.attributeCode);
+    let attributesByCode: Record<string, ProductAttribute> = {};
+    if (codeLookupNeeded.length) {
+      const codes = Array.from(new Set(codeLookupNeeded.map((a) => a.attributeCode!)));
+      const found = await attributeRepo.find({ where: { code: In(codes) } });
+      attributesByCode = Object.fromEntries(found.map((a) => [a.code, a]));
+    }
+
+    // Wipe + rewrite (Step 2 is single product, attributes are product-scoped)
+    await attrLinkRepo.delete({ inquiryProductId });
+
+    let sortOrder = 0;
+    for (const input of attributes) {
+      const attribute =
+        (input.attributeId
+          ? await attributeRepo.findOne({ where: { id: input.attributeId } })
+          : attributesByCode[input.attributeCode ?? ""]) ?? null;
+
+      if (!attribute) {
+        // Silently skip unknown codes — admin may have removed attribute
+        continue;
+      }
+
+      // Server-side guard: refuse attributes that staff have marked as
+      // catalog-only (isInquiryField=false). FE should never send these,
+      // but we enforce it here so a malicious or stale client cannot
+      // smuggle in hidden fields.
+      if (attribute.isInquiryField === false) {
+        throw new BadRequestException(
+          `Attribute "${attribute.code}" is not available on the inquiry form.`,
+        );
+      }
+
+      let optionId: number | null = input.optionId ?? null;
+      let optionValue: string | null = null;
+      let customValue: string | null = input.customValue ?? null;
+
+      if (optionId) {
+        const option = await optionRepo.findOne({
+          where: { id: optionId, attributeId: attribute.id },
+        });
+        if (!option) {
+          throw new BadRequestException(
+            `Option ${optionId} does not belong to attribute "${attribute.code}"`,
+          );
+        }
+        optionValue = option.value;
+
+        if (option.isCustomTrigger) {
+          const trimmed = customValue?.trim();
+          if (!trimmed) {
+            throw new BadRequestException(
+              `Attribute "${attribute.code}" requires a custom value when "Custom" is selected.`,
+            );
+          }
+          customValue = trimmed;
+        }
+      } else if (attribute.type === "select") {
+        // Select-type attribute without optionId: allow plain value as free-form fallback
+        if (input.value?.trim()) {
+          optionValue = input.value.trim();
+        }
+      } else {
+        // text/number/boolean/range — store free-form
+        if (input.value != null) optionValue = input.value;
+      }
+
+      const row = attrLinkRepo.create({
+        inquiryProductId,
+        attributeId: attribute.id,
+        optionId,
+        valueText: optionValue,
+        customValue,
+        sortOrder: sortOrder++,
+      });
+      await attrLinkRepo.save(row);
+    }
   }
 }

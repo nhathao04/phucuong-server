@@ -54,14 +54,17 @@ export class InquiriesController {
     });
   }
 
-  // ── STEP 2: Save product selection ─────────────────────────────────────────
+  // ── STEP 2: Save quantity, sample request, product attributes ─────────────
   @Post("step/2")
   @ApiOperation({
-    summary: "Step 2 — Save product, quantity and attributes",
+    summary:
+      "Step 2 — Save quantity, sample request and product-specific attributes",
     description:
-      "Associates the inquiry with a product and saves quantity/sample request. " +
-      "An internal email is sent to notify sales. Product-specific attributes are " +
-      "captured for the selected product.",
+      "The product was bound to the inquiry at Step 1. Step 2 saves the buyer's " +
+      "requested quantity (in MT), sample request flag, and any product-specific " +
+      "attributes (coconut size, fat content, custom values, etc.). The server " +
+      "auto-computes container quantity + MOQ status from the product config. " +
+      "An internal email is sent to notify sales.",
   })
   @ApiResponse({
     status: 201,
@@ -79,13 +82,15 @@ export class InquiriesController {
     });
   }
 
-  // ── STEP 3: Save commercial terms ─────────────────────────────────────────
+  // ── STEP 3: Save commercial terms + requirements (certs + notes) ──────────
   @Post("step/3")
   @ApiOperation({
-    summary: "Step 3 — Save trade term, payment term, delivery date",
+    summary:
+      "Step 3 — Save trade/payment/delivery, certificates and free-form notes",
     description:
-      "Saves the commercial terms for the inquiry. Internal sales notification " +
-      "is sent. Trade term and payment term are stored.",
+      "Captures the buyer's commercial terms (trade term, payment term, " +
+      "expected delivery), required certificates and any additional notes in " +
+      "a single call. Internal sales notification is sent.",
   })
   @ApiResponse({
     status: 201,
@@ -103,13 +108,14 @@ export class InquiriesController {
     });
   }
 
-  // ── STEP 4: Final submit ──────────────────────────────────────────────────
+  // ── STEP 4: Final submit (review-only) ────────────────────────────────────
   @Post("step/4")
   @ApiOperation({
-    summary: "Step 4 — Final submission with requirements & certificates",
+    summary: "Step 4 — Review & submit the inquiry",
     description:
-      "Completes the inquiry submission. Saves required certificates and additional " +
-      "requirements. Triggers final confirmation email to customer and internal " +
+      "Finalises the inquiry submission. Step 4 is review-only — every input " +
+      "(commercial terms, certificates, additional notes) was captured on " +
+      "Step 3. Triggers confirmation email to the customer and internal " +
       "notification to sales. The inquiry is marked as SUBMITTED.",
   })
   @ApiResponse({
@@ -122,7 +128,7 @@ export class InquiriesController {
     @Ip() ip: string,
     @Req() req: Request,
   ): Promise<InquiryStepSavedResponseDto> {
-    return this.inquiriesService.submitStep4(dto.inquiryId, dto, {
+    return this.inquiriesService.submitStep4(dto.inquiryId, {
       ip,
       userAgent: req.get("user-agent") ?? undefined,
     });
