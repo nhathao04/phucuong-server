@@ -101,27 +101,6 @@ export class Product {
   @Column({ type: "varchar", length: 500, nullable: true })
   imageUrl!: string | null;
 
-  @Column({ type: "varchar", length: 80, nullable: true })
-  hsCode!: string | null;
-
-  @Column({ type: "varchar", length: 120, nullable: true })
-  origin!: string | null;
-
-  @Column({ type: "varchar", length: 120, nullable: true })
-  exportPort!: string | null;
-
-  @Column({ type: "varchar", length: 120, nullable: true })
-  shelfLife!: string | null;
-
-  @Column({ type: "text", nullable: true })
-  storageCondition!: string | null;
-
-  @Column({ type: "boolean", default: false })
-  sampleAvailable!: boolean;
-
-  @Column({ type: "boolean", default: false })
-  labReportAvailable!: boolean;
-
   @Column({
     type: "text",
     array: true,

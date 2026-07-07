@@ -116,9 +116,9 @@ async function seedLandingData() {
     );
 
     const techSpecs = [
-      { label: "Origin", value: product.origin ?? "Ben Tre, Vietnam", sortOrder: 0 },
-      { label: "HS Code", value: product.hsCode ?? "0801.19", sortOrder: 1 },
-      { label: "Shelf life", value: product.shelfLife ?? "12 months", sortOrder: 2 },
+      { label: "Origin",     value: "Ben Tre, Vietnam",   sortOrder: 0 },
+      { label: "HS Code",    value: "0801.19",            sortOrder: 1 },
+      { label: "Shelf life", value: "12 months",           sortOrder: 2 },
     ];
     for (const spec of techSpecs) {
       await techSpecsRepo.save(techSpecsRepo.create({ productId: product.id, ...spec }));

@@ -71,6 +71,9 @@ export class ProductAttribute {
   @Column({ type: "varchar", length: 180, nullable: true })
   sectionLabel!: string | null;
 
+  @Column({ type: "integer", default: 0 })
+  sortOrder!: number;
+
   @Column({ type: "boolean", default: true })
   isActive!: boolean;
 

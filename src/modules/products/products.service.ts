@@ -417,13 +417,6 @@ export class ProductsService {
       status: product.status,
       sortOrder: product.sortOrder,
       isFeatured: product.isFeatured,
-      hsCode: product.hsCode,
-      origin: product.origin,
-      exportPort: product.exportPort,
-      shelfLife: product.shelfLife,
-      storageCondition: product.storageCondition,
-      sampleAvailable: product.sampleAvailable,
-      labReportAvailable: product.labReportAvailable,
       isActive: product.isActive,
       createdAt: product.createdAt,
       updatedAt: product.updatedAt,
@@ -431,12 +424,23 @@ export class ProductsService {
   }
 
   private toListItemDto(product: Product): ProductListItemDto {
+    const attrSpecs = this.toAttributeSpecifications(product);
+    const grouped: Record<string, typeof attrSpecs> = {};
+    for (const item of attrSpecs) {
+      if (!grouped[item.groupKey]) {
+        grouped[item.groupKey] = [];
+      }
+      grouped[item.groupKey].push(item);
+    }
+
     return {
       ...this.toSummaryDto(product),
       countryConfigs: (product.countryConfigs ?? [])
         .slice()
         .sort((a, b) => a.sortOrder - b.sortOrder)
         .map((config) => this.toCountryConfigDto(config)),
+      attributeSpecifications: attrSpecs,
+      attributeGrouped: grouped as ProductListItemDto["attributeGrouped"],
     };
   }
 
@@ -646,34 +650,6 @@ export class ProductsService {
         input.isActive !== undefined
           ? input.isActive
           : (existingProduct?.isActive ?? true),
-      hsCode:
-        input.hsCode !== undefined
-          ? input.hsCode
-          : (existingProduct?.hsCode ?? null),
-      origin:
-        input.origin !== undefined
-          ? input.origin
-          : (existingProduct?.origin ?? null),
-      exportPort:
-        input.exportPort !== undefined
-          ? input.exportPort
-          : (existingProduct?.exportPort ?? null),
-      shelfLife:
-        input.shelfLife !== undefined
-          ? input.shelfLife
-          : (existingProduct?.shelfLife ?? null),
-      storageCondition:
-        input.storageCondition !== undefined
-          ? input.storageCondition
-          : (existingProduct?.storageCondition ?? null),
-      sampleAvailable:
-        input.sampleAvailable !== undefined
-          ? input.sampleAvailable
-          : (existingProduct?.sampleAvailable ?? false),
-      labReportAvailable:
-        input.labReportAvailable !== undefined
-          ? input.labReportAvailable
-          : (existingProduct?.labReportAvailable ?? false),
       status:
         input.status !== undefined
           ? input.status
@@ -1596,6 +1572,8 @@ export class ProductsService {
       .leftJoinAndSelect("countryConfigs.country", "country")
       .leftJoinAndSelect("product.images", "images")
       .leftJoinAndSelect("images.asset", "imageAsset")
+      .leftJoinAndSelect("product.attributeValues", "attributeValues")
+      .leftJoinAndSelect("attributeValues.attribute", "attribute")
       .where("product.status = :status", { status: ProductStatus.PUBLISHED })
       .andWhere("product.isActive = true")
       .orderBy("product.sortOrder", "ASC")

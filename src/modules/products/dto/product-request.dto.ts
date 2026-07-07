@@ -619,35 +619,6 @@ export class CreateProductDto {
   @MaxLength(220)
   focusKeyword?: string | null;
 
-  @ApiPropertyOptional({ example: "0801.32" })
-  @IsOptional()
-  @IsString()
-  @MaxLength(80)
-  hsCode?: string | null;
-
-  @ApiPropertyOptional({ example: "Ben Tre, Vietnam" })
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  origin?: string | null;
-
-  @ApiPropertyOptional({ example: "Cat Lai Port" })
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  exportPort?: string | null;
-
-  @ApiPropertyOptional({ example: "12 months" })
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  shelfLife?: string | null;
-
-  @ApiPropertyOptional({ example: "Store in a cool, dry place" })
-  @IsOptional()
-  @IsString()
-  storageCondition?: string | null;
-
   @ApiPropertyOptional({ example: "Premium cashew nuts for export" })
   @IsOptional()
   @IsString()
@@ -667,18 +638,6 @@ export class CreateProductDto {
   @Transform(({ value }) => normalizeBoolean(value))
   @IsBoolean()
   isActive?: boolean;
-
-  @ApiPropertyOptional({ example: true })
-  @IsOptional()
-  @Transform(({ value }) => normalizeBoolean(value))
-  @IsBoolean()
-  sampleAvailable?: boolean;
-
-  @ApiPropertyOptional({ example: false })
-  @IsOptional()
-  @Transform(({ value }) => normalizeBoolean(value))
-  @IsBoolean()
-  labReportAvailable?: boolean;
 
   @ApiPropertyOptional({
     type: [String],
@@ -865,35 +824,6 @@ export class UpdateProductDto {
   @MaxLength(220)
   focusKeyword?: string | null;
 
-  @ApiPropertyOptional({ example: "0801.32" })
-  @IsOptional()
-  @IsString()
-  @MaxLength(80)
-  hsCode?: string | null;
-
-  @ApiPropertyOptional({ example: "Ben Tre, Vietnam" })
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  origin?: string | null;
-
-  @ApiPropertyOptional({ example: "Cat Lai Port" })
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  exportPort?: string | null;
-
-  @ApiPropertyOptional({ example: "12 months" })
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  shelfLife?: string | null;
-
-  @ApiPropertyOptional({ example: "Store in a cool, dry place" })
-  @IsOptional()
-  @IsString()
-  storageCondition?: string | null;
-
   @ApiPropertyOptional({ example: "organic-cashew-nuts" })
   @IsOptional()
   @IsString()
@@ -918,22 +848,7 @@ export class UpdateProductDto {
   @IsBoolean()
   isActive?: boolean;
 
-  @ApiPropertyOptional({ example: true })
-  @IsOptional()
-  @Transform(({ value }) => normalizeBoolean(value))
-  @IsBoolean()
-  sampleAvailable?: boolean;
-
-  @ApiPropertyOptional({ example: false })
-  @IsOptional()
-  @Transform(({ value }) => normalizeBoolean(value))
-  @IsBoolean()
-  labReportAvailable?: boolean;
-
-  @ApiPropertyOptional({
-    type: [String],
-    example: ["Export Ready", "FCL", "Certified"],
-  })
+  @ApiPropertyOptional({ type: [String], example: ["Export Ready", "FCL", "Certified"] })
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(16)
@@ -1073,32 +988,26 @@ export class UpdateProductDto {
 }
 
 export const CREATE_PRODUCT_SWAGGER_EXAMPLE: CreateProductDto = {
-  name: "Whole Dried Coconut",
-  slug: "whole-dried-coconut",
-  productCode: "PC-WDC-001",
+  name: "Semi-Husked Coconut",
+  slug: "semi-husked-coconut",
+  productCode: "PC-SHC-001",
   productCategorySlug: "coconut-products",
-  seoTitle: "Whole Dried Coconut Export Supplier",
+  seoTitle: "Semi-Husked Coconut Export Supplier",
   metaDescription:
-    "Premium whole dried coconut from Vietnam for B2B importers.",
-  focusKeyword: "whole dried coconut",
-  description: "Export-grade whole dried coconut for wholesale markets.",
-  shortDescription: "Export-ready whole dried coconut from Vietnam.",
-  hsCode: "0801.19",
-  origin: "Ben Tre, Vietnam",
-  exportPort: "Cat Lai Port",
-  shelfLife: "12 months",
-  storageCondition: "Store in dry and cool place",
-  badges: ["Export Ready", "FCL", "Certified"],
+    "Premium semi-husked mature coconuts from Vietnam for B2B importers.",
+  focusKeyword: "semi-husked coconut",
+  description:
+    "Export-grade semi-husked mature coconuts from Ben Tre, Vietnam.",
+  shortDescription: "Export-ready semi-husked coconuts from Vietnam.",
+  badges: ["Export Ready", "FCL"],
   isActive: true,
-  sampleAvailable: true,
-  labReportAvailable: false,
   status: ProductStatus.PUBLISHED,
   sortOrder: 1,
   isFeatured: true,
   hero: {
     eyebrow: "Premium Export Quality",
-    title: "Whole Dried Coconut",
-    subtitle: "Vietnamese coconut products prepared for international buyers.",
+    title: "Semi-Husked Coconut",
+    subtitle: "Vietnamese coconuts prepared for international buyers.",
     stats: [
       { value: "10+", label: "Years export" },
       { value: "30+", label: "Export markets" },
@@ -1106,16 +1015,28 @@ export const CREATE_PRODUCT_SWAGGER_EXAMPLE: CreateProductDto = {
     ],
   },
   quoteConfig: {
-    moq: "1 container",
+    moq: "1 x 40ft container",
     tradeTerms: ["FOB", "CNF", "CIF"],
     fields: [
       { key: "quantity", label: "Quantity", type: "number", unit: "MT", required: true },
       { key: "destinationPort", label: "Destination Port", type: "text", required: true },
     ],
   },
-  technicalSpecifications: [
-    { label: "Origin", value: "Ben Tre, Vietnam", sortOrder: 0 },
-    { label: "HS Code", value: "0801.19", sortOrder: 1 },
+  attributeValues: [
+    { attributeCode: "product_type",  groupKey: ProductAttributeGroup.SPECIFICATIONS, value: "Semi-husked mature coconut",         sectionLabel: "Product Overview", sortOrder: 1 },
+    { attributeCode: "origin",        groupKey: ProductAttributeGroup.SPECIFICATIONS, value: "Ben Tre, Vietnam",                      sectionLabel: "Product Overview", sortOrder: 2 },
+    { attributeCode: "husking",      groupKey: ProductAttributeGroup.SPECIFICATIONS, value: "Semi-husked; 60-70% husk removed",     sectionLabel: "Specifications",   sortOrder: 3 },
+    { attributeCode: "shell",        groupKey: ProductAttributeGroup.SPECIFICATIONS, value: "Natural brown, fibrous, dry surface",  sectionLabel: "Specifications",   sortOrder: 4 },
+    { attributeCode: "kernel",       groupKey: ProductAttributeGroup.SPECIFICATIONS, value: "Thick, firm, off-white",              sectionLabel: "Specifications",   sortOrder: 5 },
+    { attributeCode: "size",         groupKey: ProductAttributeGroup.SPECIFICATIONS, value: "600~1000g per nut", unit: "g",        sectionLabel: "Specifications",   sortOrder: 6 },
+    { attributeCode: "shelf_life",   groupKey: ProductAttributeGroup.SPECIFICATIONS, value: "Up to 90 days",
+      footnote: "Shelf life depends on proper storage and handling conditions after delivery.",
+      sectionLabel: "Specifications",   sortOrder: 7 },
+    { attributeCode: "harvest_season", groupKey: ProductAttributeGroup.SPECIFICATIONS, value: "Year-round",                         sectionLabel: "Specifications",   sortOrder: 8 },
+    { attributeCode: "packaging",    groupKey: ProductAttributeGroup.PACKING,        value: "PP mesh bags, ~30kg per bag",         sectionLabel: "Packing",          sortOrder: 1 },
+    { attributeCode: "container_load", groupKey: ProductAttributeGroup.PACKING,        value: "~28 tonnes per 40ft container",       sectionLabel: "Packing",          sortOrder: 2 },
+    { attributeCode: "container_type", groupKey: ProductAttributeGroup.PACKING,        value: "Standard dry container",              sectionLabel: "Packing",          sortOrder: 3 },
+    { attributeCode: "moq",          groupKey: ProductAttributeGroup.PACKING,         value: "1 x 40ft containers",                  sectionLabel: "Packing",          sortOrder: 4 },
   ],
   packagingOptions: [
     {

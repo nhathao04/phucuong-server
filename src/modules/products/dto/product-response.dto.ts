@@ -409,27 +409,6 @@ export class ProductSummaryDto {
   @ApiProperty({ enum: ProductStatus, example: ProductStatus.PUBLISHED })
   status!: ProductStatus;
 
-  @ApiPropertyOptional({ example: "0801.32" })
-  hsCode!: string | null;
-
-  @ApiPropertyOptional({ example: "Ben Tre, Vietnam" })
-  origin!: string | null;
-
-  @ApiPropertyOptional({ example: "Cat Lai Port" })
-  exportPort!: string | null;
-
-  @ApiPropertyOptional({ example: "12 months" })
-  shelfLife!: string | null;
-
-  @ApiPropertyOptional({ example: "Store in a cool, dry place" })
-  storageCondition!: string | null;
-
-  @ApiProperty({ example: false })
-  sampleAvailable!: boolean;
-
-  @ApiProperty({ example: false })
-  labReportAvailable!: boolean;
-
   @ApiProperty({ example: true })
   isActive!: boolean;
 
@@ -443,6 +422,20 @@ export class ProductSummaryDto {
 export class ProductListItemDto extends ProductSummaryDto {
   @ApiProperty({ type: [ProductCountryConfigSummaryDto] })
   countryConfigs!: ProductCountryConfigSummaryDto[];
+
+  @ApiProperty({ type: [ProductAttributeValueResponseDto] })
+  @Type(() => ProductAttributeValueResponseDto)
+  attributeSpecifications!: ProductAttributeValueResponseDto[];
+
+  @ApiProperty({
+    type: "object",
+    description:
+      "Attribute values grouped by groupKey (specifications / packing / ...).",
+    additionalProperties: true,
+  })
+  attributeGrouped!: {
+    [key in ProductAttributeGroup]?: ProductAttributeValueResponseDto[];
+  };
 }
 
 export class ProductDetailDto extends ProductSummaryDto {
