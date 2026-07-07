@@ -8,6 +8,7 @@ import { AuthModule } from "./modules/auth/auth.module";
 import { ProductsModule } from "./modules/products/products.module";
 import { BlogsModule } from "./modules/blogs/blogs.module";
 import { UsersModule } from "./modules/users/users.module";
+import { MediaModule } from "./modules/media/media.module";
 import { typeOrmModuleAsyncOptions } from "./database/typeorm.config";
 
 @Module({
@@ -20,6 +21,7 @@ import { typeOrmModuleAsyncOptions } from "./database/typeorm.config";
     DatabaseModule,
     UsersModule,
     AuthModule,
+    MediaModule,
     ProductsModule,
     BlogsModule,
   ],

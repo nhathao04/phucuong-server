@@ -10,10 +10,10 @@ import {
 } from "typeorm";
 import { Product } from "./product.entity";
 import { ProductAttribute } from "./product-attribute.entity";
-import { ProductAttributeOption } from "./product-attribute-option.entity";
 
-@Entity({ name: "product_attribute_mappings" })
-export class ProductAttributeMapping {
+@Entity({ name: "product_attribute_values" })
+@Index(["productId", "attributeId"], { unique: true })
+export class ProductAttributeValue {
   @PrimaryGeneratedColumn("increment", { type: "int" })
   id!: number;
 
@@ -21,7 +21,7 @@ export class ProductAttributeMapping {
   @Column({ type: "uuid" })
   productId!: string;
 
-  @ManyToOne(() => Product, (product) => product.attributeMappings, {
+  @ManyToOne(() => Product, (product) => product.attributeValues, {
     onDelete: "CASCADE",
   })
   @JoinColumn({ name: "productId" })
@@ -31,21 +31,28 @@ export class ProductAttributeMapping {
   @Column({ type: "int" })
   attributeId!: number;
 
-  @ManyToOne(() => ProductAttribute, (attribute) => attribute.productMappings, {
-    onDelete: "CASCADE",
-  })
+  @ManyToOne(
+    () => ProductAttribute,
+    (attribute) => attribute.productValues,
+    { onDelete: "CASCADE" },
+  )
   @JoinColumn({ name: "attributeId" })
   attribute!: ProductAttribute;
 
-  @Column({ type: "int", nullable: true })
-  defaultOptionId!: number | null;
+  @Column({ type: "text", nullable: true })
+  value!: string | null;
 
-  @ManyToOne(() => ProductAttributeOption, {
-    nullable: true,
-    onDelete: "SET NULL",
-  })
-  @JoinColumn({ name: "defaultOptionId" })
-  defaultOption!: ProductAttributeOption | null;
+  @Column({ type: "numeric", precision: 14, scale: 3, nullable: true })
+  valueNumber!: string | null;
+
+  @Column({ type: "varchar", length: 40, nullable: true })
+  unit!: string | null;
+
+  @Column({ type: "text", nullable: true })
+  footnote!: string | null;
+
+  @Column({ type: "varchar", length: 180, nullable: true })
+  sectionLabel!: string | null;
 
   @Column({ type: "boolean", default: false })
   required!: boolean;

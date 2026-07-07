@@ -31,6 +31,9 @@ export class User {
   @Column({ type: "varchar", length: 120 })
   fullName!: string;
 
+  @Column({ type: "varchar", length: 500, nullable: true })
+  avatarUrl!: string | null;
+
   @Column({ type: "uuid", nullable: true })
   roleId!: string | null;
 

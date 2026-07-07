@@ -12,12 +12,12 @@ import { ProductAttribute } from "./product-attribute.entity";
 
 @Entity({ name: "product_attribute_options" })
 export class ProductAttributeOption {
-  @PrimaryGeneratedColumn("uuid")
-  id!: string;
+  @PrimaryGeneratedColumn("increment", { type: "int" })
+  id!: number;
 
   @Index()
-  @Column({ type: "uuid" })
-  attributeId!: string;
+  @Column({ type: "int" })
+  attributeId!: number;
 
   @ManyToOne(() => ProductAttribute, (attribute) => attribute.options, {
     onDelete: "CASCADE",

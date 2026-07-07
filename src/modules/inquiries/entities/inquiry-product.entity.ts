@@ -15,8 +15,8 @@ import { InquiryProductAttribute } from "./inquiry-product-attribute.entity";
 
 @Entity({ name: "inquiry_products" })
 export class InquiryProduct {
-  @PrimaryGeneratedColumn("uuid")
-  id!: string;
+  @PrimaryGeneratedColumn("increment", { type: "int" })
+  id!: number;
 
   @Index()
   @Column({ type: "uuid" })

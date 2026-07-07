@@ -7,22 +7,19 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from "typeorm";
-import { Product } from "./product.entity";
+import { Blog } from "./blog.entity";
 
-@Entity({ name: "product_categories" })
-export class ProductCategory {
-  @PrimaryGeneratedColumn("increment", { type: "int" })
-  id!: number;
+@Entity({ name: "blog_categories" })
+export class BlogCategory {
+  @PrimaryGeneratedColumn("uuid")
+  id!: string;
 
-  @Column({ type: "varchar", length: 180 })
+  @Column({ type: "varchar", length: 120 })
   name!: string;
 
   @Index({ unique: true })
-  @Column({ type: "varchar", length: 220 })
+  @Column({ type: "varchar", length: 140 })
   slug!: string;
-
-  @Column({ type: "text", nullable: true })
-  description!: string | null;
 
   @Column({ type: "integer", default: 0 })
   sortOrder!: number;
@@ -30,8 +27,8 @@ export class ProductCategory {
   @Column({ type: "boolean", default: true })
   isActive!: boolean;
 
-  @OneToMany(() => Product, (product) => product.productCategory)
-  products!: Product[];
+  @OneToMany(() => Blog, (blog) => blog.category)
+  blogs!: Blog[];
 
   @CreateDateColumn({ type: "timestamp with time zone" })
   createdAt!: Date;

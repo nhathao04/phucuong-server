@@ -4,11 +4,18 @@ import {
   Entity,
   Index,
   JoinColumn,
+  JoinTable,
+  ManyToMany,
   ManyToOne,
+  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from "typeorm";
+import { Asset } from "../../media/entities/asset.entity";
 import { User } from "../../users/entities/user.entity";
+import { BlogAsset } from "./blog-asset.entity";
+import { BlogCategory } from "./blog-category.entity";
+import { BlogTag } from "./blog-tag.entity";
 
 export enum BlogStatus {
   DRAFT = "DRAFT",
@@ -32,10 +39,41 @@ export class Blog {
   excerpt!: string | null;
 
   @Column({ type: "text", nullable: true })
-  content!: string | null;
+  contentHtml!: string | null;
+
+  @Column({ type: "jsonb", nullable: true })
+  contentJson!: Record<string, unknown> | null;
+
+  @Column({ type: "text", nullable: true })
+  contentText!: string | null;
 
   @Column({ type: "varchar", length: 500, nullable: true })
   thumbnailUrl!: string | null;
+
+  @Column({ type: "varchar", length: 500, nullable: true })
+  coverImageUrl!: string | null;
+
+  @Index()
+  @Column({ type: "uuid", nullable: true })
+  thumbnailAssetId!: string | null;
+
+  @ManyToOne(() => Asset, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({ name: "thumbnailAssetId" })
+  thumbnailAsset!: Asset | null;
+
+  @Index()
+  @Column({ type: "uuid", nullable: true })
+  coverImageAssetId!: string | null;
+
+  @ManyToOne(() => Asset, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({ name: "coverImageAssetId" })
+  coverImage!: Asset | null;
+
+  @OneToMany(() => BlogAsset, (blogAsset) => blogAsset.blog)
+  assets!: BlogAsset[];
+
+  @Column({ type: "integer", nullable: true })
+  readTimeMinutes!: number | null;
 
   @Column({ type: "varchar", length: 220, nullable: true })
   seoTitle!: string | null;
@@ -73,6 +111,25 @@ export class Blog {
   @ManyToOne(() => User, { nullable: true, onDelete: "SET NULL" })
   @JoinColumn({ name: "authorId" })
   author!: User | null;
+
+  @Index()
+  @Column({ type: "uuid", nullable: true })
+  categoryId!: string | null;
+
+  @ManyToOne(() => BlogCategory, (cat) => cat.blogs, {
+    nullable: true,
+    onDelete: "SET NULL",
+  })
+  @JoinColumn({ name: "categoryId" })
+  category!: BlogCategory | null;
+
+  @ManyToMany(() => BlogTag, (tag) => tag.blogs, { cascade: true })
+  @JoinTable({
+    name: "blog_tag_map",
+    joinColumn: { name: "blogId", referencedColumnName: "id" },
+    inverseJoinColumn: { name: "tagId", referencedColumnName: "id" },
+  })
+  tags!: BlogTag[];
 
   @CreateDateColumn({ type: "timestamp with time zone" })
   createdAt!: Date;

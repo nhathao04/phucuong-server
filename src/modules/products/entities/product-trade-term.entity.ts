@@ -13,8 +13,8 @@ import { TradeTerm } from "./trade-term.entity";
 
 @Entity({ name: "product_trade_terms" })
 export class ProductTradeTerm {
-  @PrimaryGeneratedColumn("uuid")
-  id!: string;
+  @PrimaryGeneratedColumn("increment", { type: "int" })
+  id!: number;
 
   @Index()
   @Column({ type: "uuid" })

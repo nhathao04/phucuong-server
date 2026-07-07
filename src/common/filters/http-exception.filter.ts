@@ -32,9 +32,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
             "Internal server error");
 
     response.status(status).json({
-      errorCode: 1,
+      errorCode: status >= 400 ? 1 : 0,
+      message,
       data: {
-        message,
         path: request.url,
       },
     });

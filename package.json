@@ -7,11 +7,14 @@
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main",
+    "start:prod": "node --max-old-space-size=4096 dist/main",
+    "start:prod:2gb": "node --max-old-space-size=2048 dist/main",
     "lint": "eslint \"{src,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:cov": "jest --coverage"
+    "test:cov": "jest --coverage",
+    "seed": "ts-node -r tsconfig-paths/register src/database/seed.ts",
+    "seed:landing": "ts-node -r tsconfig-paths/register src/database/seed-landing.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.2",
