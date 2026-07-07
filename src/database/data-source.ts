@@ -22,6 +22,7 @@ import { Product } from "../modules/products/entities/product.entity";
 import { ProductAttribute } from "../modules/products/entities/product-attribute.entity";
 import { ProductAttributeMapping } from "../modules/products/entities/product-attribute-mapping.entity";
 import { ProductAttributeOption } from "../modules/products/entities/product-attribute-option.entity";
+import { ProductAttributeValue } from "../modules/products/entities/product-attribute-value.entity";
 import { ProductCertificate } from "../modules/products/entities/product-certificate.entity";
 import { ProductCategory } from "../modules/products/entities/product-category.entity";
 import { ProductContainerConfig } from "../modules/products/entities/product-container-config.entity";
@@ -64,6 +65,7 @@ export default new DataSource({
     ProductAttribute,
     ProductAttributeOption,
     ProductAttributeMapping,
+    ProductAttributeValue,
     ProductContainerConfig,
     ProductCountryConfig,
     ProductCertificate,

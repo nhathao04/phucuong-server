@@ -13,6 +13,7 @@ import { Inquiry } from "../../inquiries/entities/inquiry.entity";
 import { ProductImage } from "./product-image.entity";
 import { ProductCategory } from "./product-category.entity";
 import { ProductAttributeMapping } from "./product-attribute-mapping.entity";
+import { ProductAttributeValue } from "./product-attribute-value.entity";
 import { ProductContainerConfig } from "./product-container-config.entity";
 import { ProductCountryConfig } from "./product-country-config.entity";
 import { ProductFaq } from "./product-faq.entity";
@@ -156,6 +157,9 @@ export class Product {
 
   @OneToMany(() => ProductAttributeMapping, (mapping) => mapping.product)
   attributeMappings!: ProductAttributeMapping[];
+
+  @OneToMany(() => ProductAttributeValue, (value) => value.product)
+  attributeValues!: ProductAttributeValue[];
 
   @OneToMany(() => ProductContainerConfig, (config) => config.product)
   containerConfigs!: ProductContainerConfig[];

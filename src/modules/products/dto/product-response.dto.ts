@@ -2,6 +2,53 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import { IsInt, IsOptional } from "class-validator";
 import { ProductStatus } from "../entities/product.entity";
+import {
+  ProductAttributeGroup,
+  ProductAttributeType,
+} from "../entities/product-attribute.entity";
+
+export class ProductAttributeValueResponseDto {
+  @ApiProperty({ example: 1 })
+  id!: number;
+
+  @ApiProperty({ example: 12 })
+  attributeId!: number;
+
+  @ApiProperty({ example: "shell_color" })
+  code!: string;
+
+  @ApiProperty({ example: "Shell color" })
+  name!: string;
+
+  @ApiProperty({ enum: ProductAttributeGroup })
+  groupKey!: ProductAttributeGroup;
+
+  @ApiProperty({ enum: ProductAttributeType })
+  type!: ProductAttributeType;
+
+  @ApiPropertyOptional({ example: "Product Overview" })
+  sectionLabel!: string | null;
+
+  @ApiPropertyOptional({ example: "Natural brown, fibrous" })
+  value!: string | null;
+
+  @ApiPropertyOptional({ example: "28.5" })
+  valueNumber!: string | null;
+
+  @ApiPropertyOptional({ example: "tonnes" })
+  unit!: string | null;
+
+  @ApiPropertyOptional({
+    example: "*Shelf life depends on proper storage...",
+  })
+  footnote!: string | null;
+
+  @ApiProperty({ example: false })
+  required!: boolean;
+
+  @ApiProperty({ example: 1 })
+  sortOrder!: number;
+}
 
 export class AssetSummaryDto {
   @ApiProperty({ example: "asset-uuid" })
@@ -401,6 +448,20 @@ export class ProductListItemDto extends ProductSummaryDto {
 export class ProductDetailDto extends ProductSummaryDto {
   @ApiProperty({ type: [ProductCountryConfigSummaryDto] })
   countryConfigs!: ProductCountryConfigSummaryDto[];
+
+  @ApiProperty({ type: [ProductAttributeValueResponseDto] })
+  @Type(() => ProductAttributeValueResponseDto)
+  attributeSpecifications!: ProductAttributeValueResponseDto[];
+
+  @ApiProperty({
+    type: "object",
+    description:
+      "Attribute values grouped by groupKey (specifications / packing / ...).",
+    additionalProperties: true,
+  })
+  attributeGrouped!: {
+    [key in ProductAttributeGroup]?: ProductAttributeValueResponseDto[];
+  };
 
   @ApiProperty({ type: [ProductAttributeMappingSummaryDto] })
   attributeMappings!: ProductAttributeMappingSummaryDto[];

@@ -17,6 +17,110 @@ import {
   ValidateNested,
 } from "class-validator";
 import { ProductStatus } from "../entities/product.entity";
+import { ProductAttributeGroup, ProductAttributeType } from "../entities/product-attribute.entity";
+
+export class ProductAttributeValueInputDto {
+  @ApiPropertyOptional({
+    example: 12,
+    description: "Attribute ID. Use this OR attributeCode.",
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  attributeId?: number;
+
+  @ApiPropertyOptional({
+    example: "shell_color",
+    description: "Attribute code. Use this OR attributeId.",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  attributeCode?: string;
+
+  @ApiPropertyOptional({ enum: ProductAttributeGroup })
+  @IsOptional()
+  @IsEnum(ProductAttributeGroup)
+  groupKey?: ProductAttributeGroup;
+
+  @ApiPropertyOptional({
+    example: "Shell color",
+    description:
+      "Name of the attribute master (used when attributeCode is new and the master attribute doesn't exist yet).",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(180)
+  attributeName?: string;
+
+  @ApiPropertyOptional({
+    enum: ProductAttributeType,
+    example: ProductAttributeType.TEXT,
+    description:
+      "Type of the attribute master (used when attributeCode is new). Defaults to 'text'.",
+  })
+  @IsOptional()
+  @IsEnum(ProductAttributeType)
+  attributeType?: ProductAttributeType;
+
+  @ApiPropertyOptional({
+    example: "Natural brown, fibrous, dry surface",
+    description: "Text/rich-text value (free form).",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  value?: string | null;
+
+  @ApiPropertyOptional({
+    example: 28.5,
+    description: "Numeric value (number/range).",
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  valueNumber?: number | null;
+
+  @ApiPropertyOptional({
+    example: "tonnes",
+    description: "Override unit (e.g. 'kg', 'tonnes', '%').",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  unit?: string | null;
+
+  @ApiPropertyOptional({
+    example: "*Shelf life depends on proper storage...",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  footnote?: string | null;
+
+  @ApiPropertyOptional({ example: "Product Overview" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(180)
+  sectionLabel?: string | null;
+
+  @ApiPropertyOptional({ example: false })
+  @IsOptional()
+  required?: boolean;
+
+  @ApiPropertyOptional({ example: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  sortOrder?: number;
+
+  @ApiPropertyOptional({
+    type: "object",
+    additionalProperties: true,
+  })
+  @IsOptional()
+  metadata?: Record<string, unknown> | null;
+}
 
 const normalizeBoolean = (value: unknown): boolean | undefined => {
   if (value === undefined || value === null || value === "") {
@@ -697,6 +801,17 @@ export class CreateProductDto {
   @ValidateNested({ each: true })
   @Type(() => ProductImageRefDto)
   images?: ProductImageRefDto[];
+
+  @ApiPropertyOptional({
+    type: [ProductAttributeValueInputDto],
+    description:
+      "Per-product attribute values (Specifications / Packing). Accepts attributeId or attributeCode. Sending empty array clears values.",
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProductAttributeValueInputDto)
+  attributeValues?: ProductAttributeValueInputDto[];
 }
 
 export class UpdateProductDto {
@@ -944,6 +1059,17 @@ export class UpdateProductDto {
   @ValidateNested({ each: true })
   @Type(() => ProductImageRefDto)
   images?: ProductImageRefDto[];
+
+  @ApiPropertyOptional({
+    type: [ProductAttributeValueInputDto],
+    description:
+      "Per-product attribute values (Specifications / Packing). Accepts attributeId or attributeCode. Sending empty array clears values.",
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProductAttributeValueInputDto)
+  attributeValues?: ProductAttributeValueInputDto[];
 }
 
 export const CREATE_PRODUCT_SWAGGER_EXAMPLE: CreateProductDto = {

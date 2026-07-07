@@ -5,6 +5,7 @@ import { MediaModule } from "../media/media.module";
 import { ProductAttribute } from "./entities/product-attribute.entity";
 import { ProductAttributeMapping } from "./entities/product-attribute-mapping.entity";
 import { ProductAttributeOption } from "./entities/product-attribute-option.entity";
+import { ProductAttributeValue } from "./entities/product-attribute-value.entity";
 import { ProductImage } from "./entities/product-image.entity";
 import { Product } from "./entities/product.entity";
 import { ProductCategory } from "./entities/product-category.entity";
@@ -22,6 +23,7 @@ import {
   PublicProductsController,
 } from "./products.controller";
 import { ProductsService } from "./products.service";
+import { ProductAttributesModule } from "./product-attributes.module";
 
 @Module({
   imports: [
@@ -31,6 +33,7 @@ import { ProductsService } from "./products.service";
       ProductAttribute,
       ProductAttributeOption,
       ProductAttributeMapping,
+      ProductAttributeValue,
       ProductContainerConfig,
       ProductCountryConfig,
       ProductImage,
@@ -44,6 +47,7 @@ import { ProductsService } from "./products.service";
     ]),
     UsersModule,
     MediaModule,
+    ProductAttributesModule,
   ],
   controllers: [ProductsController, PublicProductsController],
   providers: [ProductsService],

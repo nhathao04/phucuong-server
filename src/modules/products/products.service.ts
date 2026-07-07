@@ -8,6 +8,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { In, QueryFailedError, Repository, EntityManager } from "typeorm";
 import {
   CreateProductDto,
+  ProductAttributeValueInputDto,
   ProductImageRefDto,
   ProductPackagingOptionInputDto,
   ProductQuoteConfigInputDto,
@@ -22,6 +23,7 @@ import {
 } from "../media/dto/asset.dto";
 import {
   ProductAttributeMappingSummaryDto,
+  ProductAttributeValueResponseDto,
   ProductCertificateSummaryDto,
   ProductContainerConfigSummaryDto,
   ProductCountryConfigSummaryDto,
@@ -44,10 +46,12 @@ import {
 } from "./dto/product-response.dto";
 import {
   ProductAttribute,
+  ProductAttributeGroup,
   ProductAttributeType,
 } from "./entities/product-attribute.entity";
 import { ProductAttributeMapping } from "./entities/product-attribute-mapping.entity";
 import { ProductAttributeOption } from "./entities/product-attribute-option.entity";
+import { ProductAttributeValue } from "./entities/product-attribute-value.entity";
 import { ProductContainerConfig } from "./entities/product-container-config.entity";
 import { ProductImage } from "./entities/product-image.entity";
 import {
@@ -103,6 +107,7 @@ type ProductConfigPayload = Partial<CreateProductDto & UpdateProductDto> & {
     sortOrder?: number;
   }>;
   images?: ProductImageRefDto[];
+  attributeValues?: ProductAttributeValueInputDto[];
   technicalSpecifications?: ProductTechnicalSpecificationInputDto[];
   packagingOptions?: ProductPackagingOptionInputDto[];
   targetBuyers?: ProductTargetBuyerInputDto[];
@@ -204,6 +209,30 @@ export class ProductsService {
       sortOrder: mapping.sortOrder,
       metadata: mapping.metadata,
     };
+  }
+
+  private toAttributeSpecifications(
+    product: Product,
+  ): ProductAttributeValueResponseDto[] {
+    return (product.attributeValues ?? [])
+      .slice()
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((value: ProductAttributeValue): ProductAttributeValueResponseDto => ({
+        id: value.id,
+        attributeId: value.attributeId,
+        code: value.attribute?.code ?? "",
+        name: value.attribute?.name ?? "",
+        groupKey: value.attribute?.groupKey ?? "other",
+        type: value.attribute?.type ?? "text",
+        sectionLabel:
+          value.sectionLabel ?? value.attribute?.sectionLabel ?? null,
+        value: value.value ?? null,
+        valueNumber: value.valueNumber ?? null,
+        unit: value.unit ?? value.attribute?.unit ?? null,
+        footnote: value.footnote ?? value.attribute?.footnote ?? null,
+        required: value.required,
+        sortOrder: value.sortOrder,
+      }));
   }
 
   private toContainerConfigDto(
@@ -412,6 +441,15 @@ export class ProductsService {
   }
 
   private toDetailDto(product: Product): ProductDetailDto {
+    const attrSpecs = this.toAttributeSpecifications(product);
+    const grouped: Record<string, typeof attrSpecs> = {};
+    for (const item of attrSpecs) {
+      if (!grouped[item.groupKey]) {
+        grouped[item.groupKey] = [];
+      }
+      grouped[item.groupKey].push(item);
+    }
+
     return {
       ...this.toSummaryDto(product),
       hero: this.toHero(product),
@@ -424,6 +462,8 @@ export class ProductsService {
         .slice()
         .sort((a, b) => a.sortOrder - b.sortOrder)
         .map((config) => this.toCountryConfigDto(config)),
+      attributeSpecifications: attrSpecs,
+      attributeGrouped: grouped as ProductDetailDto["attributeGrouped"],
       attributeMappings: (product.attributeMappings ?? [])
         .slice()
         .sort((a, b) => a.sortOrder - b.sortOrder)
@@ -460,6 +500,7 @@ export class ProductsService {
         productCategory: true,
         countryConfigs: { country: true },
         attributeMappings: { attribute: true, defaultOption: true },
+        attributeValues: { attribute: true },
         containerConfigs: true,
         tradeTerms: { tradeTerm: true },
         faqs: true,
@@ -1218,12 +1259,164 @@ export class ProductsService {
     await productTradeTermRepository.save(entries);
   }
 
+  private async syncAttributeValues(
+    manager: EntityManager,
+    productId: string,
+    input: CreateProductDto | UpdateProductDto,
+  ): Promise<void> {
+    const configInput = input as ProductConfigPayload;
+    if (!configInput.attributeValues) {
+      return;
+    }
+
+    const valueRepository = manager.getRepository(ProductAttributeValue);
+    const attributeRepository = manager.getRepository(ProductAttribute);
+
+    await valueRepository.delete({ productId });
+
+    if (configInput.attributeValues.length === 0) {
+      return;
+    }
+
+    const inputs = configInput.attributeValues;
+
+    // ── Step 1: collect all attribute IDs and codes ─────────────────────────
+    const attributeIds = [
+      ...new Set(
+        inputs
+          .map((item: ProductAttributeValueInputDto) => item.attributeId)
+          .filter((value): value is number => typeof value === "number"),
+      ),
+    ];
+
+    const attributeCodes = [
+      ...new Set(
+        inputs
+          .map((item: ProductAttributeValueInputDto) =>
+            item.attributeCode?.trim().toLowerCase(),
+          )
+          .filter((value): value is string => Boolean(value)),
+      ),
+    ];
+
+    // ── Step 2: load existing attributes ────────────────────────────────────
+    const attributesById = new Map<number, ProductAttribute>();
+    const attributesByCode = new Map<string, ProductAttribute>();
+
+    if (attributeIds.length > 0) {
+      const list = await attributeRepository.find({
+        where: { id: In(attributeIds) },
+      });
+      for (const attr of list) {
+        attributesById.set(attr.id, attr);
+        attributesByCode.set(attr.code.trim().toLowerCase(), attr);
+      }
+    }
+    if (attributeCodes.length > 0) {
+      const list = await attributeRepository.find({
+        where: { code: In(attributeCodes) },
+      });
+      for (const attr of list) {
+        attributesById.set(attr.id, attr);
+        attributesByCode.set(attr.code.trim().toLowerCase(), attr);
+      }
+    }
+
+    // ── Step 3: auto-create missing attribute masters ───────────────────────
+    for (const item of inputs) {
+      if (!item.attributeCode) continue;
+      const codeKey = item.attributeCode.trim().toLowerCase();
+      if (attributesByCode.has(codeKey)) continue;
+
+      // Attribute doesn't exist — create a new master entry
+      const code = item.attributeCode.trim();
+      const name =
+        item.attributeName?.trim() ||
+        this.buildAttributeNameFromCode(code);
+      const groupKey = item.groupKey ?? ProductAttributeGroup.OTHER;
+      const type = item.attributeType ?? ProductAttributeType.TEXT;
+
+      const created = attributeRepository.create({
+        code,
+        name,
+        groupKey,
+        type,
+        unit: item.unit ?? null,
+        defaultValue: item.value ?? null,
+        footnote: item.footnote ?? null,
+        sectionLabel: item.sectionLabel ?? null,
+        isActive: true,
+      });
+      const saved = await attributeRepository.save(created);
+      attributesById.set(saved.id, saved);
+      attributesByCode.set(saved.code.trim().toLowerCase(), saved);
+    }
+
+    // ── Step 4: build value entries ────────────────────────────────────────
+    const seenAttributeIds = new Set<number>();
+    const entries: ProductAttributeValue[] = [];
+
+    inputs.forEach((item: ProductAttributeValueInputDto, index: number) => {
+      let resolved: ProductAttribute | undefined;
+      if (typeof item.attributeId === "number") {
+        resolved = attributesById.get(item.attributeId);
+      } else if (item.attributeCode) {
+        resolved = attributesByCode.get(
+          item.attributeCode.trim().toLowerCase(),
+        );
+      } else {
+        throw new BadRequestException(
+          `attributeValues[${index}]: attributeId or attributeCode is required.`,
+        );
+      }
+
+      if (!resolved) {
+        throw new BadRequestException(
+          `attributeValues[${index}]: attribute not found (${item.attributeId ?? item.attributeCode}).`,
+        );
+      }
+
+      if (seenAttributeIds.has(resolved.id)) {
+        throw new BadRequestException(
+          `attributeValues[${index}]: duplicate attribute '${resolved.code}' is not allowed.`,
+        );
+      }
+      seenAttributeIds.add(resolved.id);
+
+      const valueNumberRaw = item.valueNumber ?? null;
+      const valueNumber =
+        valueNumberRaw === null || valueNumberRaw === undefined
+          ? null
+          : String(valueNumberRaw);
+
+      entries.push(
+        valueRepository.create({
+          productId,
+          attributeId: resolved.id,
+          value: item.value ?? null,
+          valueNumber,
+          unit: item.unit ?? null,
+          footnote: item.footnote ?? null,
+          sectionLabel: item.sectionLabel ?? null,
+          required: item.required ?? false,
+          sortOrder: item.sortOrder ?? index,
+          metadata: item.metadata ?? null,
+        }),
+      );
+    });
+
+    if (entries.length > 0) {
+      await valueRepository.save(entries);
+    }
+  }
+
   private async syncProductConfigurations(
     manager: EntityManager,
     productId: string,
     input: CreateProductDto | UpdateProductDto,
   ): Promise<void> {
     await this.syncAttributeMappings(manager, productId, input);
+    await this.syncAttributeValues(manager, productId, input);
     await this.syncContainerConfigs(manager, productId, input);
     await this.syncCountryConfigs(manager, productId, input);
     await this.syncImages(manager, productId, input);
@@ -1296,9 +1489,14 @@ export class ProductsService {
   }
 
   async getStaffDetail(identifier: string): Promise<ProductDetailDto> {
-    const product = await this.productsRepository.findOne({
-      where: [{ id: identifier }, { slug: identifier }],
-    });
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        identifier,
+      );
+
+    const product = isUuid
+      ? await this.productsRepository.findOne({ where: { id: identifier } })
+      : await this.productsRepository.findOne({ where: { slug: identifier } });
 
     if (!product) {
       throw new NotFoundException("Product not found");
@@ -1424,12 +1622,28 @@ export class ProductsService {
   }
 
   async getPublicDetail(identifier: string): Promise<ProductDetailDto> {
-    const product = await this.productsRepository.findOne({
-      where: [
-        { id: identifier, status: ProductStatus.PUBLISHED, isActive: true },
-        { slug: identifier, status: ProductStatus.PUBLISHED, isActive: true },
-      ],
-    });
+    // Phân loại identifier: UUID → lookup theo id; ngược lại lookup theo slug.
+    // Tránh truyền chuỗi slug vào cột uuid (Postgres "invalid input syntax for type uuid").
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        identifier,
+      );
+
+    const product = isUuid
+      ? await this.productsRepository.findOne({
+          where: {
+            id: identifier,
+            status: ProductStatus.PUBLISHED,
+            isActive: true,
+          },
+        })
+      : await this.productsRepository.findOne({
+          where: {
+            slug: identifier,
+            status: ProductStatus.PUBLISHED,
+            isActive: true,
+          },
+        });
 
     if (!product) {
       throw new NotFoundException("Product not found");
