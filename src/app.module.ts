@@ -9,6 +9,7 @@ import { ProductsModule } from "./modules/products/products.module";
 import { InquiriesModule } from "./modules/inquiries/inquiries.module";
 import { BlogsModule } from "./modules/blogs/blogs.module";
 import { UsersModule } from "./modules/users/users.module";
+import { GeographyModule } from "./modules/geography/geography.module";
 import { MediaModule } from "./modules/media/media.module";
 import { MailModule } from "./modules/mail/mail.module";
 import { typeOrmModuleAsyncOptions } from "./database/typeorm.config";
@@ -28,6 +29,7 @@ import { typeOrmModuleAsyncOptions } from "./database/typeorm.config";
     ProductsModule,
     InquiriesModule,
     BlogsModule,
+    GeographyModule,
   ],
   controllers: [AppController],
   providers: [AppService],
