@@ -43,6 +43,9 @@ import { ProductPackagingOption } from "../modules/products/entities/product-pac
 import { ProductTargetBuyer } from "../modules/products/entities/product-target-buyer.entity";
 import { ProductWhyChooseUs } from "../modules/products/entities/product-why-choose-us.entity";
 import { ProductImage } from "../modules/products/entities/product-image.entity";
+import { Quote } from "../modules/quotes/entities/quote.entity";
+import { QuoteItem } from "../modules/quotes/entities/quote-item.entity";
+import { QuoteCertificate } from "../modules/quotes/entities/quote-certificate.entity";
 
 export default new DataSource({
   type: "postgres",
@@ -95,6 +98,9 @@ export default new DataSource({
     ProductTargetBuyer,
     ProductWhyChooseUs,
     ProductImage,
+    Quote,
+    QuoteItem,
+    QuoteCertificate,
   ],
   migrations: ["src/database/migrations/*.ts"],
   synchronize: true,

@@ -10,6 +10,7 @@ export interface EmailTemplateData {
   phone?: string;
   whatsapp?: string;
   companyName?: string;
+  productAttributes?: Array<{ label: string; value: string }>;
   [key: string]: unknown;
 }
 
@@ -330,6 +331,24 @@ export function customerConfirmTemplate(data: EmailTemplateData): { subject: str
 // Template 3 — Internal notification (sales/admin)
 // ─────────────────────────────────────────────────────────────────────────────
 
+function productAttributesSection(
+  attrs: Array<{ label: string; value: string }> | undefined,
+): string {
+  if (!attrs?.length) return "";
+  return `
+    ${sectionHeading("Product Requirements")}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+           style="background-color:${BRAND.greenSoft};border:1px solid ${BRAND.greenBorder};
+                  border-radius:8px;margin-bottom:20px;">
+      <tr><td style="padding:20px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+          ${attrs.map((a) => infoRow(a.label, a.value)).join("")}
+        </table>
+      </td></tr>
+    </table>
+  `;
+}
+
 export function internalNotificationTemplate(
   data: EmailTemplateData,
 ): { subject: string; html: string } {
@@ -337,6 +356,7 @@ export function internalNotificationTemplate(
     customerName, inquiryCode, inquiryId, step,
     productName, tradeTerm, quantity,
     email, phone, whatsapp, companyName,
+    productAttributes,
   } = data;
 
   const stepLabel =
@@ -384,6 +404,8 @@ export function internalNotificationTemplate(
         </table>
       </td></tr>
     </table>
+
+    ${productAttributesSection(productAttributes)}
 
     ${sectionHeading("Customer Information")}
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0"

@@ -692,6 +692,9 @@ export class InquiriesService {
       }),
     );
 
+    // Load product attributes for email
+    const productAttributes = await this.loadProductAttributesForEmail(manager, inquiry.id);
+
     // Send via template
     const sent = await this.mailService.sendFromTemplate(EmailType.INTERNAL_NOTIFY, {
       customerName: customer?.fullName ?? inquiry.fullName ?? "Unknown",
@@ -704,6 +707,7 @@ export class InquiriesService {
       companyName: customer?.companyName ?? inquiry.companyName ?? undefined,
       tradeTerm: inquiry.tradeTerm ?? undefined,
       quantity: inquiry.quantity ?? undefined,
+      productAttributes,
     });
 
     await manager.getRepository(Inquiry).update(inquiry.id, {
@@ -712,6 +716,40 @@ export class InquiriesService {
     });
 
     return sent;
+  }
+
+  private async loadProductAttributesForEmail(
+    manager: EntityManager,
+    inquiryId: string,
+  ): Promise<Array<{ label: string; value: string }>> {
+    const productRepo = manager.getRepository(InquiryProduct);
+    const attrLinkRepo = manager.getRepository(InquiryProductAttribute);
+    const attributeRepo = manager.getRepository(ProductAttribute);
+
+    const products = await productRepo.find({ where: { inquiryId } });
+    if (!products.length) return [];
+
+    const product = products[0]; // Use first product
+    const attrLinks = await attrLinkRepo.find({
+      where: { inquiryProductId: product.id },
+      order: { sortOrder: "ASC" },
+    });
+
+    if (!attrLinks.length) return [];
+
+    const attributeIds = attrLinks.map((a) => a.attributeId);
+    const attributes = await attributeRepo.find({ where: { id: In(attributeIds) } });
+    const attrMap = Object.fromEntries(attributes.map((a) => [a.id, a]));
+
+    return attrLinks
+      .map((link) => {
+        const attr = attrMap[link.attributeId];
+        if (!attr) return null;
+        const value = link.customValue ?? link.valueText ?? "";
+        if (!value) return null;
+        return { label: attr.name, value };
+      })
+      .filter((item): item is { label: string; value: string } => item !== null);
   }
 
   private async sendCustomerAckEmail(
@@ -851,16 +889,6 @@ export class InquiriesService {
       if (!attribute) {
         // Silently skip unknown codes — admin may have removed attribute
         continue;
-      }
-
-      // Server-side guard: refuse attributes that staff have marked as
-      // catalog-only (isInquiryField=false). FE should never send these,
-      // but we enforce it here so a malicious or stale client cannot
-      // smuggle in hidden fields.
-      if (attribute.isInquiryField === false) {
-        throw new BadRequestException(
-          `Attribute "${attribute.code}" is not available on the inquiry form.`,
-        );
       }
 
       let optionId: number | null = input.optionId ?? null;

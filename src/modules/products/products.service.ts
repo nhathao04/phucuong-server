@@ -84,6 +84,7 @@ type ProductConfigPayload = Partial<CreateProductDto & UpdateProductDto> & {
     defaultOptionId?: number | null;
     defaultOptionValue?: string | null;
     required?: boolean;
+    isInquiryField?: boolean;
     sortOrder?: number;
     metadata?: Record<string, unknown> | null;
   }>;
@@ -212,6 +213,7 @@ export class ProductsService {
       defaultOptionId: mapping.defaultOptionId,
       defaultOptionValue: mapping.defaultOption?.value ?? null,
       required: mapping.required,
+      isInquiryField: mapping.isInquiryField,
       sortOrder: mapping.sortOrder,
       metadata: mapping.metadata,
     };
@@ -718,14 +720,86 @@ export class ProductsService {
     );
   }
 
+  private buildAttributeMappingInputs(
+    input: CreateProductDto | UpdateProductDto,
+  ): {
+    hasExplicitMappings: boolean;
+    mappingInputs: NonNullable<ProductConfigPayload["attributeMappings"]>;
+  } {
+    const configInput = input as ProductConfigPayload;
+    const hasExplicitMappings = configInput.attributeMappings !== undefined;
+
+    if (hasExplicitMappings) {
+      return {
+        hasExplicitMappings: true,
+        mappingInputs: configInput.attributeMappings ?? [],
+      };
+    }
+
+    // Build inquiry field mappings from quoteConfig.fields
+    const quoteFields = configInput.quoteConfig?.fields;
+    if (quoteFields?.length) {
+      const mappingInputs: NonNullable<ProductConfigPayload["attributeMappings"]> =
+        [];
+      quoteFields.forEach((field, index) => {
+        mappingInputs.push({
+          attributeCode: field.key,
+          required: field.required ?? false,
+          isInquiryField: true,
+          sortOrder: field.sortOrder ?? index,
+          metadata: field.unit ? { unit: field.unit } : null,
+        });
+      });
+      return { hasExplicitMappings: false, mappingInputs };
+    }
+
+    // Build spec display mappings from attributeValues (isInquiryField=false)
+    if (!configInput.attributeValues?.length) {
+      return { hasExplicitMappings: false, mappingInputs: [] };
+    }
+
+    const seen = new Set<string>();
+    const mappingInputs: NonNullable<ProductConfigPayload["attributeMappings"]> =
+      [];
+
+    configInput.attributeValues.forEach((item, index) => {
+      const dedupeKey =
+        typeof item.attributeId === "number"
+          ? `id:${item.attributeId}`
+          : item.attributeCode?.trim().toLowerCase();
+
+      if (!dedupeKey || seen.has(dedupeKey)) {
+        return;
+      }
+
+      seen.add(dedupeKey);
+      mappingInputs.push({
+        attributeId: item.attributeId,
+        attributeCode: item.attributeCode,
+        required: item.required ?? false,
+        isInquiryField: false,
+        sortOrder: item.sortOrder ?? index,
+        metadata: null,
+      });
+    });
+
+    return { hasExplicitMappings: false, mappingInputs };
+  }
+
   private async syncAttributeMappings(
     manager: EntityManager,
     productId: string,
     input: CreateProductDto | UpdateProductDto,
   ): Promise<void> {
-    const configInput = input as ProductConfigPayload;
+    const { hasExplicitMappings, mappingInputs } =
+      this.buildAttributeMappingInputs(input);
 
-    if (!configInput.attributeMappings) {
+    if (mappingInputs.length === 0) {
+      if (hasExplicitMappings) {
+        await manager
+          .getRepository(ProductAttributeMapping)
+          .delete({ productId });
+      }
       return;
     }
 
@@ -735,36 +809,22 @@ export class ProductsService {
     const attributeRepository = manager.getRepository(ProductAttribute);
     const optionRepository = manager.getRepository(ProductAttributeOption);
 
-    await attributeMappingRepository.delete({ productId });
-
-    if (configInput.attributeMappings.length === 0) {
-      return;
+    if (hasExplicitMappings) {
+      await attributeMappingRepository.delete({ productId });
     }
 
     const attributeIds = [
       ...new Set(
-        configInput.attributeMappings
-          .map(
-            (
-              item: NonNullable<
-                ProductConfigPayload["attributeMappings"]
-              >[number],
-            ) => item.attributeId,
-          )
+        mappingInputs
+          .map((item) => item.attributeId)
           .filter((value): value is number => typeof value === "number"),
       ),
     ];
 
     const attributeCodes = [
       ...new Set(
-        configInput.attributeMappings
-          .map(
-            (
-              item: NonNullable<
-                ProductConfigPayload["attributeMappings"]
-              >[number],
-            ) => item.attributeCode?.trim().toLowerCase(),
-          )
+        mappingInputs
+          .map((item) => item.attributeCode?.trim().toLowerCase())
           .filter((value): value is string => Boolean(value)),
       ),
     ];
@@ -801,7 +861,7 @@ export class ProductsService {
       attributeId: number;
     }> = [];
 
-    for (const mappingInput of configInput.attributeMappings) {
+    for (const mappingInput of mappingInputs) {
       const resolvedById = mappingInput.attributeId
         ? attributesById.get(mappingInput.attributeId)
         : undefined;
@@ -879,7 +939,7 @@ export class ProductsService {
         .getOne();
     };
 
-    const mappings: ProductAttributeMapping[] = [];
+    const mappingsToSave: ProductAttributeMapping[] = [];
     for (const resolvedMapping of resolvedMappings) {
       const mappingInput = resolvedMapping.input;
       let resolvedDefaultOptionId: number | null = null;
@@ -913,19 +973,61 @@ export class ProductsService {
         }
       }
 
-      mappings.push(
+      const isInquiryField =
+        mappingInput.isInquiryField ?? (hasExplicitMappings ? true : false);
+
+      if (hasExplicitMappings) {
+        mappingsToSave.push(
+          attributeMappingRepository.create({
+            productId,
+            attributeId: resolvedMapping.attributeId,
+            defaultOptionId: resolvedDefaultOptionId,
+            required: mappingInput.required ?? false,
+            isInquiryField,
+            sortOrder: mappingInput.sortOrder ?? 0,
+            metadata: mappingInput.metadata ?? null,
+          }),
+        );
+        continue;
+      }
+
+      const existing = await attributeMappingRepository.findOne({
+        where: {
+          productId,
+          attributeId: resolvedMapping.attributeId,
+        },
+      });
+
+      if (existing) {
+        existing.required = mappingInput.required ?? existing.required;
+        existing.sortOrder = mappingInput.sortOrder ?? existing.sortOrder;
+        existing.metadata = mappingInput.metadata ?? existing.metadata;
+        if (mappingInput.isInquiryField !== undefined) {
+          existing.isInquiryField = mappingInput.isInquiryField;
+        }
+        if (resolvedDefaultOptionId !== null) {
+          existing.defaultOptionId = resolvedDefaultOptionId;
+        }
+        mappingsToSave.push(existing);
+        continue;
+      }
+
+      mappingsToSave.push(
         attributeMappingRepository.create({
           productId,
           attributeId: resolvedMapping.attributeId,
           defaultOptionId: resolvedDefaultOptionId,
           required: mappingInput.required ?? false,
+          isInquiryField,
           sortOrder: mappingInput.sortOrder ?? 0,
           metadata: mappingInput.metadata ?? null,
         }),
       );
     }
 
-    await attributeMappingRepository.save(mappings);
+    if (mappingsToSave.length > 0) {
+      await attributeMappingRepository.save(mappingsToSave);
+    }
   }
 
   private async syncContainerConfigs(
@@ -1397,8 +1499,8 @@ export class ProductsService {
     productId: string,
     input: CreateProductDto | UpdateProductDto,
   ): Promise<void> {
-    await this.syncAttributeMappings(manager, productId, input);
     await this.syncAttributeValues(manager, productId, input);
+    await this.syncAttributeMappings(manager, productId, input);
     await this.syncContainerConfigs(manager, productId, input);
     await this.syncCountryConfigs(manager, productId, input);
     await this.syncImages(manager, productId, input);
@@ -1701,9 +1803,7 @@ export class ProductsService {
     const mappings: InquiryOrderAttributeMappingDto[] = (
       product.attributeMappings ?? []
     )
-      .filter(
-        (mapping) => mapping.attribute?.isInquiryField !== false,
-      )
+      .filter((mapping) => mapping.isInquiryField !== false)
       .slice()
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((mapping): InquiryOrderAttributeMappingDto => ({
@@ -1718,7 +1818,7 @@ export class ProductsService {
         placeholder: mapping.attribute?.placeholder ?? null,
         footnote: mapping.attribute?.footnote ?? null,
         required: mapping.required,
-        isInquiryField: mapping.attribute?.isInquiryField ?? true,
+        isInquiryField: mapping.isInquiryField,
         sortOrder: mapping.sortOrder,
         defaultOptionId: mapping.defaultOptionId ?? null,
         options: (mapping.attribute?.options ?? [])

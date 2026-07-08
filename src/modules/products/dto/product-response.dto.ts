@@ -156,6 +156,12 @@ export class ProductAttributeMappingSummaryDto {
   @ApiProperty({ example: true })
   required!: boolean;
 
+  @ApiProperty({
+    example: true,
+    description: "Whether this attribute is shown on the inquiry form.",
+  })
+  isInquiryField!: boolean;
+
   @ApiProperty({ example: 0 })
   sortOrder!: number;
 

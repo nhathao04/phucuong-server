@@ -7,6 +7,8 @@ import { DatabaseModule } from "./database/database.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { ProductsModule } from "./modules/products/products.module";
 import { InquiriesModule } from "./modules/inquiries/inquiries.module";
+import { CertificatesModule } from "./modules/inquiries/certificates/certificates.module";
+import { QuotesModule } from "./modules/quotes/quotes.module";
 import { BlogsModule } from "./modules/blogs/blogs.module";
 import { UsersModule } from "./modules/users/users.module";
 import { GeographyModule } from "./modules/geography/geography.module";
@@ -28,6 +30,8 @@ import { typeOrmModuleAsyncOptions } from "./database/typeorm.config";
     MailModule,
     ProductsModule,
     InquiriesModule,
+    CertificatesModule,
+    QuotesModule,
     BlogsModule,
     GeographyModule,
   ],
