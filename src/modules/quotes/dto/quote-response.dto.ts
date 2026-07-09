@@ -1,5 +1,4 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { QuoteStatus } from "../entities/quote.entity";
 
 export class QuoteResponseDto {
   @ApiProperty()
@@ -41,9 +40,6 @@ export class QuoteResponseDto {
   notes!: string | null;
 
   // Quote Response
-  @ApiProperty({ enum: QuoteStatus })
-  status!: QuoteStatus;
-
   @ApiProperty()
   contacted!: boolean;
 
@@ -85,9 +81,6 @@ export class QuotePublicResponseDto {
 
   @ApiProperty()
   code!: string;
-
-  @ApiProperty()
-  status!: QuoteStatus;
 
   @ApiProperty()
   message!: string;

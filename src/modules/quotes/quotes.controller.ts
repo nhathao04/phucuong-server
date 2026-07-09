@@ -26,7 +26,6 @@ import {
   QuoteListResponseDto,
   QuotePublicResponseDto,
 } from "./dto/quote-response.dto";
-import { QuoteStatus } from "./entities/quote.entity";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 
 @ApiTags("Quotes")
@@ -63,21 +62,18 @@ export class QuotesController {
   @ApiOperation({ summary: "List all quotes (staff)" })
   @ApiQuery({ name: "page", required: false })
   @ApiQuery({ name: "limit", required: false })
-  @ApiQuery({ name: "status", required: false, enum: QuoteStatus })
   @ApiQuery({ name: "search", required: false })
   @ApiQuery({ name: "assignedToId", required: false })
   @ApiResponse({ status: 200, type: QuoteListResponseDto })
   async findAll(
     @Query("page") page?: number,
     @Query("limit") limit?: number,
-    @Query("status") status?: QuoteStatus,
     @Query("search") search?: string,
     @Query("assignedToId") assignedToId?: string,
   ): Promise<QuoteListResponseDto> {
     return this.quotesService.findAllStaff({
       page: page ? Number(page) : 1,
       limit: limit ? Number(limit) : 20,
-      status,
       search,
       assignedToId,
     });
@@ -108,6 +104,20 @@ export class QuotesController {
   ): Promise<QuoteResponseDto> {
     const staffId = req.user?.id ?? "system";
     return this.quotesService.updateStaff(id, dto, staffId);
+  }
+
+  @Put("staff/quotes/:id/contacted")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: "Toggle contacted flag (true ↔ false) on a quote",
+  })
+  @ApiParam({ name: "id", example: 1 })
+  @ApiResponse({ status: 200, type: QuoteResponseDto })
+  async toggleContacted(
+    @Param("id", ParseIntPipe) id: number,
+  ): Promise<QuoteResponseDto> {
+    return this.quotesService.toggleContacted(id);
   }
 
   @Put("staff/quotes/:id/assign")

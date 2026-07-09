@@ -5,7 +5,7 @@ import {
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, Like } from "typeorm";
-import { Quote, QuoteStatus } from "./entities/quote.entity";
+import { Quote } from "./entities/quote.entity";
 import { User } from "../users/entities/user.entity";
 import { CreateQuoteDto, UpdateQuoteDto } from "./dto/quote-request.dto";
 import {
@@ -44,7 +44,6 @@ export class QuotesService {
       productName: dto.productName ?? null,
       quantity: dto.quantity ?? null,
       notes: dto.notes ?? null,
-      status: QuoteStatus.PENDING,
     });
 
     const saved = await this.quoteRepo.save(quote);
@@ -52,7 +51,6 @@ export class QuotesService {
     return {
       id: saved.id,
       code: saved.code,
-      status: saved.status,
       message: `Quote request ${saved.code} submitted successfully. We will respond within 24 hours.`,
     };
   }
@@ -70,8 +68,9 @@ export class QuotesService {
     return {
       id: quote.id,
       code: quote.code,
-      status: quote.status,
-      message: this.getStatusMessage(quote),
+      message: quote.contacted
+        ? "Our sales team has already reached out to you regarding this quote. Please check your email for the latest update."
+        : "Your quote request is being reviewed. We will respond within 24 hours.",
     };
   }
 
@@ -82,7 +81,6 @@ export class QuotesService {
   async findAllStaff(params: {
     page?: number;
     limit?: number;
-    status?: QuoteStatus;
     search?: string;
     assignedToId?: string;
   }): Promise<QuoteListResponseDto> {
@@ -91,10 +89,6 @@ export class QuotesService {
     const skip = (page - 1) * limit;
 
     const where: any = {};
-
-    if (params.status) {
-      where.status = params.status;
-    }
 
     if (params.assignedToId) {
       where.assignedToId = params.assignedToId;
@@ -139,7 +133,7 @@ export class QuotesService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Staff: Update quote (mark as contacted)
+  // Staff: Update quote (legacy generic update — kept for future-proofing)
   // ─────────────────────────────────────────────────────────────────────────────
 
   async updateStaff(
@@ -156,6 +150,22 @@ export class QuotesService {
       quote.contacted = dto.contacted;
     }
 
+    await this.quoteRepo.save(quote);
+
+    return this.findOneStaff(id);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Staff: Toggle contacted flag (true ↔ false)
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  async toggleContacted(id: number): Promise<QuoteResponseDto> {
+    const quote = await this.quoteRepo.findOne({ where: { id } });
+    if (!quote) {
+      throw new NotFoundException("Quote not found");
+    }
+
+    quote.contacted = !quote.contacted;
     await this.quoteRepo.save(quote);
 
     return this.findOneStaff(id);
@@ -233,27 +243,11 @@ export class QuotesService {
       productName: quote.productName,
       quantity: quote.quantity,
       notes: quote.notes,
-      status: quote.status,
       contacted: quote.contacted,
       assignedToId: quote.assignedToId,
       assignedToName: quote.assignedTo?.fullName ?? null,
       createdAt: quote.createdAt,
       updatedAt: quote.updatedAt,
     };
-  }
-
-  private getStatusMessage(quote: Quote): string {
-    switch (quote.status) {
-      case QuoteStatus.PENDING:
-        return "Your quote request is being reviewed. We will respond within 24 hours.";
-      case QuoteStatus.QUOTED:
-        return "Your quote has been prepared. Check your email for details.";
-      case QuoteStatus.REJECTED:
-        return "Unfortunately, we cannot process this quote at this time.";
-      case QuoteStatus.EXPIRED:
-        return "This quote has expired. Please submit a new request.";
-      default:
-        return "";
-    }
   }
 }
