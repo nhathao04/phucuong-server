@@ -17,11 +17,17 @@ export class BlogListQueryDto {
     description: "Search by title, slug, or excerpt",
   })
   @IsOptional()
+  @Transform(({ value }) =>
+    value === undefined || value === null || value === "" ? undefined : value,
+  )
   @IsString()
   search?: string;
 
   @ApiPropertyOptional({ enum: BlogStatus, example: BlogStatus.PUBLISHED })
   @IsOptional()
+  @Transform(({ value }) =>
+    value === undefined || value === null || value === "" ? undefined : value,
+  )
   @IsEnum(BlogStatus)
   status?: BlogStatus;
 

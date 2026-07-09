@@ -7,6 +7,25 @@ import {
   ProductAttributeType,
 } from "../entities/product-attribute.entity";
 
+export class ProductAttributeValueSummaryDto {
+  @ApiProperty({ example: "origin" })
+  code!: string;
+
+  @ApiProperty({ example: "Origin" })
+  name!: string;
+
+  @ApiProperty({ enum: ProductAttributeGroup })
+  groupKey!: ProductAttributeGroup;
+
+  @ApiPropertyOptional({ example: "Ben Tre, Vietnam" })
+  value!: string | null;
+
+  @ApiPropertyOptional({
+    example: "*Shelf life depends on proper storage...",
+  })
+  footnote!: string | null;
+}
+
 export class ProductAttributeValueResponseDto {
   @ApiProperty({ example: 1 })
   id!: number;
@@ -429,28 +448,20 @@ export class ProductListItemDto extends ProductSummaryDto {
   @ApiProperty({ type: [ProductCountryConfigSummaryDto] })
   countryConfigs!: ProductCountryConfigSummaryDto[];
 
-  @ApiProperty({ type: [ProductAttributeValueResponseDto] })
-  @Type(() => ProductAttributeValueResponseDto)
-  attributeSpecifications!: ProductAttributeValueResponseDto[];
-
   @ApiProperty({
     type: "object",
     description:
-      "Attribute values grouped by groupKey (specifications / packing / ...).",
+      "Attribute values grouped by groupKey (specifications / packing / ...). Only essential fields: code, name, groupKey, value, footnote.",
     additionalProperties: true,
   })
   attributeGrouped!: {
-    [key in ProductAttributeGroup]?: ProductAttributeValueResponseDto[];
+    [key in ProductAttributeGroup]?: ProductAttributeValueSummaryDto[];
   };
 }
 
 export class ProductDetailDto extends ProductSummaryDto {
   @ApiProperty({ type: [ProductCountryConfigSummaryDto] })
   countryConfigs!: ProductCountryConfigSummaryDto[];
-
-  @ApiProperty({ type: [ProductAttributeValueResponseDto] })
-  @Type(() => ProductAttributeValueResponseDto)
-  attributeSpecifications!: ProductAttributeValueResponseDto[];
 
   @ApiProperty({
     type: "object",

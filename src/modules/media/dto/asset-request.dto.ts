@@ -124,14 +124,18 @@ export class ListAssetsQueryDto {
 
   @ApiPropertyOptional({ enum: AssetOwnerType, example: AssetOwnerType.BLOG })
   @IsOptional()
-  @Transform(({ value }) =>
-    typeof value === "string" ? value.trim().toUpperCase() : value,
-  )
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === "") return undefined;
+    return typeof value === "string" ? value.trim().toUpperCase() : value;
+  })
   @IsEnum(AssetOwnerType)
   ownerType?: AssetOwnerType;
 
   @ApiPropertyOptional({ example: "550e8400-e29b-41d4-a716-446655440000" })
   @IsOptional()
+  @Transform(({ value }) =>
+    value === undefined || value === null || value === "" ? undefined : value,
+  )
   @IsUUID()
   ownerId?: string;
 }

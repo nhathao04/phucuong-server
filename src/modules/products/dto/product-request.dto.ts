@@ -433,6 +433,16 @@ export class ProductImageRefDto {
   alt?: string;
 
   @ApiPropertyOptional({
+    description: "Optional caption displayed alongside the image",
+    example: "Workers sorting cashews at the Binh Duong facility",
+    type: "string",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  caption?: string | null;
+
+  @ApiPropertyOptional({
     description: "Display order (lower = first)",
     example: 0,
     type: "integer",
@@ -527,6 +537,97 @@ export class ProductWhyChooseUsInputDto {
   @IsString()
   @MaxLength(1000)
   description?: string | null;
+
+  @ApiPropertyOptional({ example: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  sortOrder?: number;
+}
+
+export class ProductFaqInputDto {
+  @ApiPropertyOptional({
+    description: "Existing FAQ id. Omit when creating a new FAQ.",
+    example: 1,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  id?: number;
+
+  @ApiProperty({ example: "What is the MOQ?" })
+  @IsString()
+  @MaxLength(500)
+  question!: string;
+
+  @ApiProperty({ example: "The typical MOQ is 1 container." })
+  @IsString()
+  answer!: string;
+
+  @ApiPropertyOptional({ example: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  sortOrder?: number;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @Transform(({ value }) => normalizeBoolean(value))
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+export class ProductCertificateInputDto {
+  @ApiPropertyOptional({
+    description: "Existing product-certificate mapping id. Omit when adding a new mapping.",
+    example: 1,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  id?: number;
+
+  @ApiPropertyOptional({
+    description: "Certificate UUID (preferred). Use this OR name.",
+    example: "550e8400-e29b-41d4-a716-446655440020",
+    format: "uuid",
+  })
+  @IsOptional()
+  @IsUUID()
+  certificateId?: string;
+
+  @ApiPropertyOptional({
+    description: "Certificate name. Used to look up (or create) the certificate by name when certificateId is not provided.",
+    example: "ISO 9001:2015",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  name?: string;
+
+  @ApiPropertyOptional({
+    description: "Certificate status (e.g. 'active', 'available'). Required when creating by name.",
+    example: "active",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  status?: string | null;
+
+  @ApiPropertyOptional({
+    description: "Certificate file URL (e.g. Cloudinary PDF). Optional when creating by name.",
+    example: "https://cdn.example.com/certificates/iso-9001.pdf",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  fileUrl?: string | null;
+
+  @ApiPropertyOptional({ example: false })
+  @IsOptional()
+  @Transform(({ value }) => normalizeBoolean(value))
+  @IsBoolean()
+  isRequired?: boolean;
 
   @ApiPropertyOptional({ example: 0 })
   @IsOptional()
@@ -677,6 +778,24 @@ export class CreateProductDto {
   shortDescription?: string | null;
 
   @ApiPropertyOptional({
+    example: "https://cdn.example.com/products/cashew-thumb.webp",
+    description: "Optional explicit thumbnail URL. If omitted, derived from images[0].",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  thumbnailUrl?: string | null;
+
+  @ApiPropertyOptional({
+    example: "https://cdn.example.com/products/cashew-hero.webp",
+    description: "Optional explicit hero image URL. If omitted, derived from images[0].",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  imageUrl?: string | null;
+
+  @ApiPropertyOptional({
     example: true,
     description: "Whether product is visible in staff/client flows",
   })
@@ -817,6 +936,27 @@ export class CreateProductDto {
   @ValidateNested({ each: true })
   @Type(() => ProductAttributeValueInputDto)
   attributeValues?: ProductAttributeValueInputDto[];
+
+  @ApiPropertyOptional({
+    type: [ProductFaqInputDto],
+    description: "Replace product FAQs. Sending empty array clears FAQs.",
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProductFaqInputDto)
+  faqs?: ProductFaqInputDto[];
+
+  @ApiPropertyOptional({
+    type: [ProductCertificateInputDto],
+    description:
+      "Replace product certificate mappings. Provide certificateId or name. Sending empty array clears certificates.",
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProductCertificateInputDto)
+  certificates?: ProductCertificateInputDto[];
 }
 
 export class UpdateProductDto {
@@ -887,6 +1027,24 @@ export class UpdateProductDto {
   @IsString()
   @MaxLength(400)
   shortDescription?: string | null;
+
+  @ApiPropertyOptional({
+    example: "https://cdn.example.com/products/cashew-thumb.webp",
+    description: "Optional explicit thumbnail URL. If omitted, derived from images[0].",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  thumbnailUrl?: string | null;
+
+  @ApiPropertyOptional({
+    example: "https://cdn.example.com/products/cashew-hero.webp",
+    description: "Optional explicit hero image URL. If omitted, derived from images[0].",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  imageUrl?: string | null;
 
   @ApiPropertyOptional({ example: true })
   @IsOptional()
@@ -1031,6 +1189,27 @@ export class UpdateProductDto {
   @ValidateNested({ each: true })
   @Type(() => ProductAttributeValueInputDto)
   attributeValues?: ProductAttributeValueInputDto[];
+
+  @ApiPropertyOptional({
+    type: [ProductFaqInputDto],
+    description: "Replace product FAQs. Sending empty array clears FAQs.",
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProductFaqInputDto)
+  faqs?: ProductFaqInputDto[];
+
+  @ApiPropertyOptional({
+    type: [ProductCertificateInputDto],
+    description:
+      "Replace product certificate mappings. Provide certificateId or name. Sending empty array clears certificates.",
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProductCertificateInputDto)
+  certificates?: ProductCertificateInputDto[];
 }
 
 export const CREATE_PRODUCT_SWAGGER_EXAMPLE: CreateProductDto = {

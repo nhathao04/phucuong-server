@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
   IsBoolean,
   IsEnum,
@@ -17,6 +17,15 @@ import {
   InquirySalesStatus,
   InquiryStatus,
 } from "../entities/inquiry.enums";
+
+// Treat empty strings (and whitespace-only) coming from query strings
+// (?status=&formStatus=) as `undefined` so optional filters are skipped
+// instead of failing @IsEnum / @IsIn validators.
+const emptyToUndefined = ({ value }: { value: unknown }): unknown => {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "string" && value.trim() === "") return undefined;
+  return value;
+};
 
 export class InquiryListQueryDto {
   @ApiPropertyOptional({ description: "Page number (1-based)", example: 1, default: 1 })
@@ -36,26 +45,33 @@ export class InquiryListQueryDto {
 
   @ApiPropertyOptional({ description: "Free-text search across code, customer name, email, company" })
   @IsOptional()
+  @Transform(emptyToUndefined)
   @IsString()
   search?: string;
 
   @ApiPropertyOptional({ enum: InquiryStatus, description: "Filter by lifecycle status" })
   @IsOptional()
+  @Transform(emptyToUndefined)
   @IsEnum(InquiryStatus)
   status?: InquiryStatus;
 
   @ApiPropertyOptional({ enum: InquiryFormStatus, description: "Filter by form-step status" })
   @IsOptional()
+  @Transform(emptyToUndefined)
   @IsEnum(InquiryFormStatus)
   formStatus?: InquiryFormStatus;
 
   @ApiPropertyOptional({ enum: InquirySalesStatus, description: "Filter by sales pipeline status" })
   @IsOptional()
+  @Transform(emptyToUndefined)
   @IsEnum(InquirySalesStatus)
   salesStatus?: InquirySalesStatus;
 
   @ApiPropertyOptional({ description: "Filter by current step", minimum: 1, maximum: 4 })
   @IsOptional()
+  @Transform(({ value }) =>
+    value === undefined || value === null || value === "" ? undefined : value,
+  )
   @Type(() => Number)
   @IsInt()
   @Min(1)
@@ -76,31 +92,37 @@ export class InquiryListQueryDto {
 
   @ApiPropertyOptional({ description: "Filter by destination country (UUID)" })
   @IsOptional()
+  @Transform(emptyToUndefined)
   @IsUUID()
   destinationCountryId?: string;
 
   @ApiPropertyOptional({ description: "Filter by product (UUID)" })
   @IsOptional()
+  @Transform(emptyToUndefined)
   @IsUUID()
   productId?: string;
 
   @ApiPropertyOptional({ description: "Filter by customer (UUID)" })
   @IsOptional()
+  @Transform(emptyToUndefined)
   @IsUUID()
   customerId?: string;
 
   @ApiPropertyOptional({ description: "Filter by UTM source" })
   @IsOptional()
+  @Transform(emptyToUndefined)
   @IsString()
   utmSource?: string;
 
   @ApiPropertyOptional({ description: "Created at >= this ISO timestamp" })
   @IsOptional()
+  @Transform(emptyToUndefined)
   @IsISO8601()
   createdFrom?: string;
 
   @ApiPropertyOptional({ description: "Created at <= this ISO timestamp" })
   @IsOptional()
+  @Transform(emptyToUndefined)
   @IsISO8601()
   createdTo?: string;
 
@@ -109,11 +131,13 @@ export class InquiryListQueryDto {
     enum: ["createdAt", "updatedAt", "code", "leadCapturedAt", "submittedAt"],
   })
   @IsOptional()
+  @Transform(emptyToUndefined)
   @IsIn(["createdAt", "updatedAt", "code", "leadCapturedAt", "submittedAt"])
   sortBy?: "createdAt" | "updatedAt" | "code" | "leadCapturedAt" | "submittedAt" = "createdAt";
 
   @ApiPropertyOptional({ enum: ["ASC", "DESC"], description: "Sort direction" })
   @IsOptional()
+  @Transform(emptyToUndefined)
   @IsIn(["ASC", "DESC"])
   sortDir?: "ASC" | "DESC" = "DESC";
 }

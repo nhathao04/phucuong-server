@@ -9,6 +9,8 @@ import { In, QueryFailedError, Repository, EntityManager } from "typeorm";
 import {
   CreateProductDto,
   ProductAttributeValueInputDto,
+  ProductCertificateInputDto,
+  ProductFaqInputDto,
   ProductImageRefDto,
   ProductPackagingOptionInputDto,
   ProductQuoteConfigInputDto,
@@ -25,6 +27,7 @@ import { AssetOwnerType } from "../media/entities/asset.entity";
 import {
   ProductAttributeMappingSummaryDto,
   ProductAttributeValueResponseDto,
+  ProductAttributeValueSummaryDto,
   ProductCertificateSummaryDto,
   ProductContainerConfigSummaryDto,
   ProductCountryConfigSummaryDto,
@@ -77,6 +80,7 @@ import { ProductTargetBuyer } from "./entities/product-target-buyer.entity";
 import { ProductWhyChooseUs } from "./entities/product-why-choose-us.entity";
 import { Country } from "../geography/entities/country.entity";
 import { Asset } from "../media/entities/asset.entity";
+import { Certificate } from "../inquiries/entities/certificate.entity";
 
 type ProductConfigPayload = Partial<CreateProductDto & UpdateProductDto> & {
   attributeMappings?: Array<{
@@ -120,6 +124,8 @@ type ProductConfigPayload = Partial<CreateProductDto & UpdateProductDto> & {
   packagingOptions?: ProductPackagingOptionInputDto[];
   targetBuyers?: ProductTargetBuyerInputDto[];
   whyChooseUs?: ProductWhyChooseUsInputDto[];
+  faqs?: ProductFaqInputDto[];
+  certificates?: ProductCertificateInputDto[];
   badges?: string[];
   hero?: ProductQuoteConfigInputDto extends never
     ? never
@@ -155,6 +161,8 @@ export class ProductsService {
     private readonly productCategoriesRepository: Repository<ProductCategory>,
     @InjectRepository(Country)
     private readonly countriesRepository: Repository<Country>,
+    @InjectRepository(Certificate)
+    private readonly certificateRepository: Repository<Certificate>,
   ) {}
 
   private normalizeText(value?: string | null): string | null {
@@ -242,6 +250,18 @@ export class ProductsService {
         required: value.required,
         sortOrder: value.sortOrder,
       }));
+  }
+
+  private toAttributeValueSummary(
+    value: ProductAttributeValue,
+  ): ProductAttributeValueSummaryDto {
+    return {
+      code: value.attribute?.code ?? "",
+      name: value.attribute?.name ?? "",
+      groupKey: value.attribute?.groupKey ?? "other",
+      value: value.value ?? null,
+      footnote: value.footnote ?? value.attribute?.footnote ?? null,
+    };
   }
 
   private toContainerConfigDto(
@@ -433,13 +453,15 @@ export class ProductsService {
   }
 
   private toListItemDto(product: Product): ProductListItemDto {
-    const attrSpecs = this.toAttributeSpecifications(product);
-    const grouped: Record<string, typeof attrSpecs> = {};
-    for (const item of attrSpecs) {
-      if (!grouped[item.groupKey]) {
-        grouped[item.groupKey] = [];
+    const attrValues = (product.attributeValues ?? []).slice().sort((a, b) => a.sortOrder - b.sortOrder);
+    const grouped: Record<string, ProductAttributeValueSummaryDto[]> = {};
+    for (const value of attrValues) {
+      const summary = this.toAttributeValueSummary(value);
+      const key = summary.groupKey;
+      if (!grouped[key]) {
+        grouped[key] = [];
       }
-      grouped[item.groupKey].push(item);
+      grouped[key].push(summary);
     }
 
     return {
@@ -448,14 +470,13 @@ export class ProductsService {
         .slice()
         .sort((a, b) => a.sortOrder - b.sortOrder)
         .map((config) => this.toCountryConfigDto(config)),
-      attributeSpecifications: attrSpecs,
       attributeGrouped: grouped as ProductListItemDto["attributeGrouped"],
     };
   }
 
   private toDetailDto(product: Product): ProductDetailDto {
     const attrSpecs = this.toAttributeSpecifications(product);
-    const grouped: Record<string, typeof attrSpecs> = {};
+    const grouped: Record<string, ProductAttributeValueResponseDto[]> = {};
     for (const item of attrSpecs) {
       if (!grouped[item.groupKey]) {
         grouped[item.groupKey] = [];
@@ -475,7 +496,6 @@ export class ProductsService {
         .slice()
         .sort((a, b) => a.sortOrder - b.sortOrder)
         .map((config) => this.toCountryConfigDto(config)),
-      attributeSpecifications: attrSpecs,
       attributeGrouped: grouped as ProductDetailDto["attributeGrouped"],
       attributeMappings: (product.attributeMappings ?? [])
         .slice()
@@ -655,6 +675,14 @@ export class ProductsService {
         input.shortDescription !== undefined
           ? input.shortDescription
           : (existingProduct?.shortDescription ?? null),
+      thumbnailUrl:
+        input.thumbnailUrl !== undefined
+          ? input.thumbnailUrl
+          : (existingProduct?.thumbnailUrl ?? null),
+      imageUrl:
+        input.imageUrl !== undefined
+          ? input.imageUrl
+          : (existingProduct?.imageUrl ?? null),
       isActive:
         input.isActive !== undefined
           ? input.isActive
@@ -1165,10 +1193,19 @@ export class ProductsService {
             url: ref.url,
             thumbnailUrl: ref.url, // Cloudinary can generate thumbnails from URL
             alt: ref.alt ?? null,
+            caption: ref.caption ?? null,
             mimeType: "image",
             ownerType: AssetOwnerType.PRODUCT,
             ownerId: productId,
           });
+          asset = await assetRepository.save(asset);
+        } else if (
+          (ref.caption !== undefined && ref.caption !== asset.caption) ||
+          (ref.alt !== undefined && ref.alt !== asset.alt)
+        ) {
+          // Update alt/caption if caller supplied a new value
+          asset.alt = ref.alt ?? asset.alt;
+          asset.caption = ref.caption ?? asset.caption;
           asset = await assetRepository.save(asset);
         }
         assetId = asset.id;
@@ -1372,6 +1409,115 @@ export class ProductsService {
     await productTradeTermRepository.save(entries);
   }
 
+  private async syncFaqs(
+    manager: EntityManager,
+    productId: string,
+    input: CreateProductDto | UpdateProductDto,
+  ): Promise<void> {
+    const configInput = input as ProductConfigPayload;
+    if (!configInput.faqs) return;
+
+    const faqRepository = manager.getRepository(ProductFaq);
+    await faqRepository.delete({ productId });
+
+    if (configInput.faqs.length === 0) return;
+
+    const seenQuestions = new Set<string>();
+    const entries = configInput.faqs.map((faq, index) => {
+      const question = faq.question.trim();
+      const key = question.toLowerCase();
+      if (seenQuestions.has(key)) {
+        throw new BadRequestException(
+          `Duplicate FAQ question provided in payload: ${question}`,
+        );
+      }
+      seenQuestions.add(key);
+
+      return faqRepository.create({
+        productId,
+        question,
+        answer: faq.answer,
+        sortOrder: faq.sortOrder ?? index,
+        isActive: faq.isActive ?? true,
+      });
+    });
+
+    await faqRepository.save(entries);
+  }
+
+  private async syncCertificates(
+    manager: EntityManager,
+    productId: string,
+    input: CreateProductDto | UpdateProductDto,
+  ): Promise<void> {
+    const configInput = input as ProductConfigPayload;
+    if (!configInput.certificates) return;
+
+    const productCertificateRepository = manager.getRepository(ProductCertificate);
+    const certificateRepository = manager.getRepository(Certificate);
+    await productCertificateRepository.delete({ productId });
+
+    if (configInput.certificates.length === 0) return;
+
+    const seen = new Set<string>();
+    const entries: ProductCertificate[] = [];
+
+    for (let index = 0; index < configInput.certificates.length; index += 1) {
+      const item = configInput.certificates[index];
+      let resolvedCertificateId: string | null = null;
+
+      if (item.certificateId) {
+        const cert = await certificateRepository.findOne({
+          where: { id: item.certificateId },
+        });
+        if (!cert) {
+          throw new BadRequestException(
+            `Certificate not found for id: ${item.certificateId}`,
+          );
+        }
+        resolvedCertificateId = cert.id;
+      } else {
+        const trimmedName = item.name?.trim();
+        if (!trimmedName) {
+          throw new BadRequestException(
+            `Certificate entry #${index + 1} requires either certificateId or name.`,
+          );
+        }
+        let cert = await certificateRepository.findOne({
+          where: { name: trimmedName },
+        });
+        if (!cert) {
+          cert = await certificateRepository.save(
+            certificateRepository.create({
+              name: trimmedName,
+              status: item.status ?? null,
+              fileUrl: item.fileUrl ?? null,
+            }),
+          );
+        }
+        resolvedCertificateId = cert.id;
+      }
+
+      if (seen.has(resolvedCertificateId)) {
+        throw new BadRequestException(
+          `Duplicate certificate provided in payload: ${resolvedCertificateId}`,
+        );
+      }
+      seen.add(resolvedCertificateId);
+
+      entries.push(
+        productCertificateRepository.create({
+          productId,
+          certificateId: resolvedCertificateId,
+          isRequired: item.isRequired ?? false,
+          sortOrder: item.sortOrder ?? index,
+        }),
+      );
+    }
+
+    await productCertificateRepository.save(entries);
+  }
+
   private async syncAttributeValues(
     manager: EntityManager,
     productId: string,
@@ -1538,6 +1684,8 @@ export class ProductsService {
     await this.syncTargetBuyers(manager, productId, input);
     await this.syncWhyChooseUs(manager, productId, input);
     await this.syncTradeTerms(manager, productId, input);
+    await this.syncFaqs(manager, productId, input);
+    await this.syncCertificates(manager, productId, input);
   }
 
   private isUniqueConstraintError(error: unknown): boolean {

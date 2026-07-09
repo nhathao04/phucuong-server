@@ -15,6 +15,9 @@ export class ProductListQueryDto {
     description: "Search by product name, slug, or description",
   })
   @IsOptional()
+  @Transform(({ value }) =>
+    value === undefined || value === null || value === "" ? undefined : value,
+  )
   @IsString()
   search?: string;
 

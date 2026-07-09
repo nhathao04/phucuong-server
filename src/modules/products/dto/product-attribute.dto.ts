@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
   ArrayMaxSize,
   IsArray,
@@ -245,6 +245,9 @@ export class ProductAttributeResponseDto {
 export class ProductAttributeListQueryDto {
   @ApiPropertyOptional({ enum: ProductAttributeGroup })
   @IsOptional()
+  @Transform(({ value }) =>
+    value === undefined || value === null || value === "" ? undefined : value,
+  )
   @IsEnum(ProductAttributeGroup)
   groupKey?: ProductAttributeGroup;
 

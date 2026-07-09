@@ -6,6 +6,8 @@ import { ProductAttribute } from "./entities/product-attribute.entity";
 import { ProductAttributeMapping } from "./entities/product-attribute-mapping.entity";
 import { ProductAttributeOption } from "./entities/product-attribute-option.entity";
 import { ProductAttributeValue } from "./entities/product-attribute-value.entity";
+import { ProductCertificate } from "./entities/product-certificate.entity";
+import { ProductFaq } from "./entities/product-faq.entity";
 import { ProductImage } from "./entities/product-image.entity";
 import { Product } from "./entities/product.entity";
 import { ProductCategory } from "./entities/product-category.entity";
@@ -18,6 +20,7 @@ import { ProductTradeTerm } from "./entities/product-trade-term.entity";
 import { ProductWhyChooseUs } from "./entities/product-why-choose-us.entity";
 import { TradeTerm } from "./entities/trade-term.entity";
 import { Country } from "../geography/entities/country.entity";
+import { Certificate } from "../inquiries/entities/certificate.entity";
 import {
   ProductsController,
   PublicProductsController,
@@ -36,6 +39,8 @@ import { ProductAttributesModule } from "./product-attributes.module";
       ProductAttributeValue,
       ProductContainerConfig,
       ProductCountryConfig,
+      ProductFaq,
+      ProductCertificate,
       ProductImage,
       ProductTechnicalSpecification,
       ProductPackagingOption,
@@ -44,6 +49,7 @@ import { ProductAttributesModule } from "./product-attributes.module";
       TradeTerm,
       ProductTradeTerm,
       Country,
+      Certificate,
     ]),
     UsersModule,
     MediaModule,
