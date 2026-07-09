@@ -135,11 +135,26 @@ export class InquiriesAdminService {
       : [];
     const productNameMap = new Map(products.map((p) => [p.id, p.name] as const));
 
+    // Hydrate destination country names
+    const countryIds = Array.from(
+      new Set(rows.map((r) => r.destinationCountryId).filter((id): id is string => !!id)),
+    );
+    const countries = countryIds.length
+      ? await this.countryRepo.find({
+          where: countryIds.map((id) => ({ id })),
+          select: ["id", "name"],
+        })
+      : [];
+    const countryNameMap = new Map(countries.map((c) => [c.id, c.name] as const));
+
     const items: InquiryListItemDto[] = rows.map((row) => {
       const productName = row.productId
         ? productNameMap.get(row.productId) ?? null
         : null;
-      return this.mapListItem(row, productName);
+      const destinationCountry = row.destinationCountryId
+        ? countryNameMap.get(row.destinationCountryId) ?? row.destinationCountry ?? null
+        : row.destinationCountry ?? null;
+      return this.mapListItem(row, productName, destinationCountry);
     });
 
     return {
@@ -188,7 +203,7 @@ export class InquiriesAdminService {
     const staffMap = new Map(staffUsers.map((u) => [u.id, u] as const));
 
     return {
-      ...this.mapListItem(inquiry, productName),
+      ...this.mapListItem(inquiry, productName, inquiry.destinationCountry ?? null),
       phone: inquiry.phone,
       whatsapp: inquiry.whatsapp,
       ipAddress: inquiry.ipAddress ?? null,
@@ -413,17 +428,19 @@ export class InquiriesAdminService {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  private mapListItem(row: Inquiry, productName: string | null): InquiryListItemDto {
+  private mapListItem(row: Inquiry, productName: string | null, destinationCountry: string | null): InquiryListItemDto {
     return {
       id: row.id,
       code: row.code,
       customerName: row.fullName ?? null,
       companyName: row.companyName ?? null,
       email: row.email ?? null,
+      phone: row.phone ?? null,
+      whatsapp: row.whatsapp ?? null,
       productId: row.productId ?? null,
       productName,
       destinationCountryId: row.destinationCountryId ?? null,
-      destinationCountry: row.destinationCountry ?? null,
+      destinationCountry,
       tradeTerm: row.tradeTerm ?? null,
       quantity: row.quantity !== undefined && row.quantity !== null ? String(row.quantity) : null,
       quantityUnit: row.quantityUnit ?? null,

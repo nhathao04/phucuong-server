@@ -17,6 +17,7 @@ import {
   ApiResponse,
   ApiParam,
   ApiBearerAuth,
+  ApiQuery,
 } from "@nestjs/swagger";
 import { QuotesService } from "./quotes.service";
 import { CreateQuoteDto, UpdateQuoteDto } from "./dto/quote-request.dto";
@@ -60,6 +61,11 @@ export class QuotesController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: "List all quotes (staff)" })
+  @ApiQuery({ name: "page", required: false })
+  @ApiQuery({ name: "limit", required: false })
+  @ApiQuery({ name: "status", required: false, enum: QuoteStatus })
+  @ApiQuery({ name: "search", required: false })
+  @ApiQuery({ name: "assignedToId", required: false })
   @ApiResponse({ status: 200, type: QuoteListResponseDto })
   async findAll(
     @Query("page") page?: number,

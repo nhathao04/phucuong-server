@@ -6,6 +6,8 @@ export class InquiryListItemDto {
   @ApiPropertyOptional() customerName!: string | null;
   @ApiPropertyOptional() companyName!: string | null;
   @ApiPropertyOptional() email!: string | null;
+  @ApiPropertyOptional() phone!: string | null;
+  @ApiPropertyOptional() whatsapp!: string | null;
   @ApiPropertyOptional() productId!: string | null;
   @ApiPropertyOptional() productName!: string | null;
   @ApiPropertyOptional() destinationCountryId!: string | null;
@@ -36,8 +38,8 @@ export class InquiryListResponseDto {
 }
 
 export class InquiryDetailDto extends InquiryListItemDto {
-  @ApiPropertyOptional() phone!: string | null;
-  @ApiPropertyOptional() whatsapp!: string | null;
+  @ApiPropertyOptional() declare phone: string | null;
+  @ApiPropertyOptional() declare whatsapp: string | null;
   @ApiPropertyOptional() ipAddress!: string | null;
   @ApiPropertyOptional() userAgent!: string | null;
   @ApiPropertyOptional() referrerUrl!: string | null;
