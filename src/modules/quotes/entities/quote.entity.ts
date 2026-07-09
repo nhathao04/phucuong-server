@@ -68,6 +68,9 @@ export class Quote {
   @Column({ type: "enum", enum: QuoteStatus, default: QuoteStatus.PENDING })
   status!: QuoteStatus;
 
+  @Column({ type: "boolean", default: false })
+  contacted!: boolean;
+
   @Column({ type: "decimal", precision: 14, scale: 2, nullable: true })
   quotedPrice!: string | null;
 

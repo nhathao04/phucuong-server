@@ -37,14 +37,14 @@ export class QuotesController {
   // Public endpoints
   // ─────────────────────────────────────────────────────────────────────────────
 
-  @Post("api/quotes")
+  @Post("quotes")
   @ApiOperation({ summary: "Submit a quote request" })
   @ApiResponse({ status: 201, type: QuotePublicResponseDto })
   async create(@Body() dto: CreateQuoteDto): Promise<QuotePublicResponseDto> {
     return this.quotesService.create(dto);
   }
 
-  @Get("api/quotes/:code")
+  @Get("quotes/:code")
   @ApiOperation({ summary: "Get quote status by code" })
   @ApiParam({ name: "code", example: "QT-2026-00001" })
   @ApiResponse({ status: 200, type: QuotePublicResponseDto })
@@ -56,7 +56,7 @@ export class QuotesController {
   // Staff endpoints (protected)
   // ─────────────────────────────────────────────────────────────────────────────
 
-  @Get("api/staff/quotes")
+  @Get("staff/quotes")
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: "List all quotes (staff)" })
@@ -77,7 +77,7 @@ export class QuotesController {
     });
   }
 
-  @Get("api/staff/quotes/:id")
+  @Get("staff/quotes/:id")
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: "Get quote details (staff)" })
@@ -89,7 +89,7 @@ export class QuotesController {
     return this.quotesService.findOneStaff(id);
   }
 
-  @Put("api/staff/quotes/:id")
+  @Put("staff/quotes/:id")
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: "Update quote (staff)" })
@@ -104,7 +104,7 @@ export class QuotesController {
     return this.quotesService.updateStaff(id, dto, staffId);
   }
 
-  @Put("api/staff/quotes/:id/assign")
+  @Put("staff/quotes/:id/assign")
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: "Assign quote to staff" })
@@ -117,7 +117,7 @@ export class QuotesController {
     return this.quotesService.assignQuote(id, assignedToId);
   }
 
-  @Delete("api/staff/quotes/:id")
+  @Delete("staff/quotes/:id")
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: "Delete quote (staff)" })

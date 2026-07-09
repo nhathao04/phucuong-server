@@ -401,11 +401,42 @@ export class ProductHeroInputDto {
 }
 
 export class ProductImageRefDto {
-  @ApiProperty({ example: "asset-uuid" })
-  @IsUUID()
-  assetId!: string;
+  @ApiPropertyOptional({
+    description: "Cloudinary URL of the image (e.g. https://res.cloudinary.com/xxx/image/upload/...)",
+    example: "https://res.cloudinary.com/xxx/image/upload/v1/products/coconut.jpg",
+    type: "string",
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  url?: string;
 
-  @ApiPropertyOptional({ example: 0 })
+  @ApiPropertyOptional({
+    description: "Asset UUID (if image was previously uploaded via media API)",
+    example: "550e8400-e29b-41d4-a716-446655440000",
+    type: "string",
+    format: "uuid",
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  assetId?: string;
+
+  @ApiPropertyOptional({
+    description: "Alt text for the image",
+    example: "Fresh coconut product",
+    type: "string",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  alt?: string;
+
+  @ApiPropertyOptional({
+    description: "Display order (lower = first)",
+    example: 0,
+    type: "integer",
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()

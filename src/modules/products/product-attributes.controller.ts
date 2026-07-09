@@ -21,6 +21,8 @@ import { StaffRoleGuard } from "../../common/guards/staff-role.guard";
 import { ProductAttributesService } from "./product-attributes.service";
 import {
   AddAttributeOptionDto,
+  CreateCatalogAttributeDto,
+  CreateInquiryAttributeDto,
   CreateProductAttributeDto,
   ProductAttributeListQueryDto,
   ProductAttributeResponseDto,
@@ -71,6 +73,30 @@ export class ProductAttributesController {
     @Body() dto: CreateProductAttributeDto,
   ): Promise<ProductAttributeResponseDto> {
     return this.attributesService.create(dto);
+  }
+
+  @Post("catalog")
+  @ApiOperation({
+    summary: "Create catalog attribute (for product display only, not inquiry form)",
+    description: "Simple attribute: groupKey, name, note. isInquiryField = false",
+  })
+  @ApiResponse({ status: 201, type: ProductAttributeResponseDto })
+  createCatalog(
+    @Body() dto: CreateCatalogAttributeDto,
+  ): Promise<ProductAttributeResponseDto> {
+    return this.attributesService.createCatalog(dto);
+  }
+
+  @Post("inquiry")
+  @ApiOperation({
+    summary: "Create inquiry attribute (for buyer inquiry form)",
+    description: "Complex attribute with type, options, placeholder. isInquiryField = true",
+  })
+  @ApiResponse({ status: 201, type: ProductAttributeResponseDto })
+  createInquiry(
+    @Body() dto: CreateInquiryAttributeDto,
+  ): Promise<ProductAttributeResponseDto> {
+    return this.attributesService.createInquiry(dto);
   }
 
   @Patch(":identifier")

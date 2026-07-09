@@ -21,6 +21,7 @@ import { ProductListQueryDto } from "./dto/product-list-query.dto";
 import {
   AssetSummaryDto,
 } from "../media/dto/asset.dto";
+import { AssetOwnerType } from "../media/entities/asset.entity";
 import {
   ProductAttributeMappingSummaryDto,
   ProductAttributeValueResponseDto,
@@ -1139,23 +1140,51 @@ export class ProductsService {
     if (!configInput.images) return;
 
     const imageRepository = manager.getRepository(ProductImage);
+    const assetRepository = manager.getRepository(Asset);
     await imageRepository.delete({ productId });
 
     if (configInput.images.length === 0) return;
 
     const seen = new Set<string>();
     const entries: ProductImage[] = [];
-    configInput.images.forEach((ref, index) => {
-      if (!ref.assetId || seen.has(ref.assetId)) return;
-      seen.add(ref.assetId);
+
+    for (const ref of configInput.images) {
+      let assetId = ref.assetId;
+
+      // If URL is provided instead of assetId, create or find existing Asset
+      if (!assetId && ref.url) {
+        // Check if asset with this URL already exists
+        let asset = await assetRepository.findOne({
+          where: { url: ref.url },
+          select: { id: true },
+        });
+
+        if (!asset) {
+          // Create new asset record
+          asset = assetRepository.create({
+            url: ref.url,
+            thumbnailUrl: ref.url, // Cloudinary can generate thumbnails from URL
+            alt: ref.alt ?? null,
+            mimeType: "image",
+            ownerType: AssetOwnerType.PRODUCT,
+            ownerId: productId,
+          });
+          asset = await assetRepository.save(asset);
+        }
+        assetId = asset.id;
+      }
+
+      if (!assetId || seen.has(assetId)) continue;
+      seen.add(assetId);
+
       entries.push(
         imageRepository.create({
           productId,
-          assetId: ref.assetId,
-          sortOrder: ref.sortOrder ?? index,
+          assetId,
+          sortOrder: ref.sortOrder ?? entries.length,
         }),
       );
-    });
+    }
 
     if (entries.length > 0) {
       await imageRepository.save(entries);

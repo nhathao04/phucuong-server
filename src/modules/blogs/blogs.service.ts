@@ -5,7 +5,7 @@ import {
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { EntityManager, QueryFailedError, Repository } from "typeorm";
-import { Asset } from "../media/entities/asset.entity";
+import { Asset, AssetOwnerType } from "../media/entities/asset.entity";
 import { AssetSummaryDto } from "../media/dto/asset.dto";
 import { BlogAsset } from "./entities/blog-asset.entity";
 import { Blog, BlogStatus } from "./entities/blog.entity";
@@ -145,6 +145,34 @@ export class BlogsService {
     } as const;
   }
 
+  private async ensureAssetFromUrl(
+    manager: EntityManager,
+    url: string,
+    ownerId: string,
+    ownerType: AssetOwnerType = AssetOwnerType.BLOG,
+  ): Promise<string | null> {
+    if (!url) return null;
+
+    const assetRepository = manager.getRepository(Asset);
+    let asset = await assetRepository.findOne({
+      where: { url },
+      select: { id: true },
+    });
+
+    if (!asset) {
+      asset = assetRepository.create({
+        url,
+        thumbnailUrl: url,
+        mimeType: "image",
+        ownerType,
+        ownerId,
+      });
+      asset = await assetRepository.save(asset);
+    }
+
+    return asset.id;
+  }
+
   private async syncAssets(
     manager: EntityManager,
     blogId: string,
@@ -154,6 +182,7 @@ export class BlogsService {
       return;
     }
     const blogAssetRepository = manager.getRepository(BlogAsset);
+    const assetRepository = manager.getRepository(Asset);
     await blogAssetRepository.delete({ blogId });
 
     if (assets.length === 0) {
@@ -162,19 +191,44 @@ export class BlogsService {
 
     const seen = new Set<string>();
     const entries: BlogAsset[] = [];
-    assets.forEach((asset, index) => {
-      if (!asset.assetId || seen.has(asset.assetId)) {
-        return;
+
+    for (const asset of assets) {
+      let assetId = asset.assetId;
+
+      // If URL is provided instead of assetId, create or find existing Asset
+      if (!assetId && asset.url) {
+        let existingAsset = await assetRepository.findOne({
+          where: { url: asset.url },
+          select: { id: true },
+        });
+
+        if (!existingAsset) {
+          existingAsset = assetRepository.create({
+            url: asset.url,
+            thumbnailUrl: asset.url,
+            alt: asset.alt ?? null,
+            caption: asset.caption ?? null,
+            mimeType: "image",
+            ownerType: AssetOwnerType.BLOG,
+            ownerId: blogId,
+          });
+          existingAsset = await assetRepository.save(existingAsset);
+        }
+        assetId = existingAsset.id;
       }
-      seen.add(asset.assetId);
+
+      if (!assetId || seen.has(assetId)) continue;
+      seen.add(assetId);
+
       entries.push(
         blogAssetRepository.create({
           blogId,
-          assetId: asset.assetId,
-          sortOrder: asset.sortOrder ?? index,
+          assetId,
+          sortOrder: asset.sortOrder ?? entries.length,
         }),
       );
-    });
+    }
+
     if (entries.length > 0) {
       await blogAssetRepository.save(entries);
     }
@@ -251,6 +305,8 @@ export class BlogsService {
       return await this.blogsRepository.manager.transaction(
         async (manager) => {
           const blogRepository = manager.getRepository(Blog);
+
+          // Create blog first to get ID
           const slug = this.resolveSlug(dto.title, dto.slug);
           const status = dto.status ?? BlogStatus.DRAFT;
 
@@ -261,10 +317,6 @@ export class BlogsService {
             contentHtml: dto.contentHtml ?? null,
             contentJson: dto.contentJson ?? null,
             contentText: dto.contentText ?? null,
-            thumbnailUrl: dto.thumbnailUrl ?? null,
-            thumbnailAssetId: dto.thumbnailAssetId ?? null,
-            coverImageUrl: dto.coverImageUrl ?? null,
-            coverImageAssetId: dto.coverImageAssetId ?? null,
             readTimeMinutes: dto.readTimeMinutes ?? null,
             seoTitle: dto.seoTitle ?? null,
             metaDescription: dto.metaDescription ?? null,
@@ -278,6 +330,33 @@ export class BlogsService {
           });
 
           const saved = await blogRepository.save(blog);
+
+          // Auto-create assets from URLs if provided
+          if (dto.thumbnailUrl) {
+            saved.thumbnailAssetId = await this.ensureAssetFromUrl(
+              manager,
+              dto.thumbnailUrl,
+              saved.id,
+              AssetOwnerType.BLOG,
+            );
+            saved.thumbnailUrl = dto.thumbnailUrl;
+          } else if (dto.thumbnailAssetId) {
+            saved.thumbnailAssetId = dto.thumbnailAssetId;
+          }
+
+          if (dto.coverImageUrl) {
+            saved.coverImageAssetId = await this.ensureAssetFromUrl(
+              manager,
+              dto.coverImageUrl,
+              saved.id,
+              AssetOwnerType.BLOG,
+            );
+            saved.coverImageUrl = dto.coverImageUrl;
+          } else if (dto.coverImageAssetId) {
+            saved.coverImageAssetId = dto.coverImageAssetId;
+          }
+
+          await blogRepository.save(saved);
 
           if (dto.assets) {
             await this.syncAssets(manager, saved.id, dto.assets);
@@ -323,18 +402,47 @@ export class BlogsService {
             blog.contentJson = dto.contentJson ?? null;
           if (dto.contentText !== undefined)
             blog.contentText = dto.contentText ?? null;
-          if (dto.thumbnailUrl !== undefined)
+
+          // Handle thumbnailUrl - auto-create asset from URL
+          if (dto.thumbnailUrl !== undefined) {
             blog.thumbnailUrl = dto.thumbnailUrl ?? null;
+            if (dto.thumbnailUrl) {
+              blog.thumbnailAssetId = await this.ensureAssetFromUrl(
+                manager,
+                dto.thumbnailUrl,
+                blog.id,
+                AssetOwnerType.BLOG,
+              );
+            } else {
+              blog.thumbnailAssetId = null;
+              blog.thumbnailAsset = null;
+            }
+          }
           if (dto.thumbnailAssetId !== undefined) {
             blog.thumbnailAssetId = dto.thumbnailAssetId ?? null;
             blog.thumbnailAsset = null;
           }
-          if (dto.coverImageUrl !== undefined)
+
+          // Handle coverImageUrl - auto-create asset from URL
+          if (dto.coverImageUrl !== undefined) {
             blog.coverImageUrl = dto.coverImageUrl ?? null;
+            if (dto.coverImageUrl) {
+              blog.coverImageAssetId = await this.ensureAssetFromUrl(
+                manager,
+                dto.coverImageUrl,
+                blog.id,
+                AssetOwnerType.BLOG,
+              );
+            } else {
+              blog.coverImageAssetId = null;
+              blog.coverImage = null;
+            }
+          }
           if (dto.coverImageAssetId !== undefined) {
             blog.coverImageAssetId = dto.coverImageAssetId ?? null;
             blog.coverImage = null;
           }
+
           if (dto.readTimeMinutes !== undefined)
             blog.readTimeMinutes = dto.readTimeMinutes ?? null;
           if (dto.seoTitle !== undefined) blog.seoTitle = dto.seoTitle ?? null;

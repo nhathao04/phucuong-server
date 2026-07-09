@@ -316,3 +316,111 @@ export class UpdateAttributeOptionDto {
   @MaxLength(255)
   customPlaceholder?: string;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Catalog Attribute DTOs - Simple attribute for product display only
+// ─────────────────────────────────────────────────────────────────────────────
+
+export class CreateCatalogAttributeDto {
+  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
+  @IsString()
+  productId!: string;
+
+  @ApiProperty({ example: "Origin Country" })
+  @IsString()
+  @MaxLength(180)
+  name!: string;
+
+  @ApiProperty({
+    enum: ProductAttributeGroup,
+    example: ProductAttributeGroup.SPECIFICATIONS,
+  })
+  @IsEnum(ProductAttributeGroup)
+  groupKey!: ProductAttributeGroup;
+
+  @ApiPropertyOptional({ example: "Country of origin: Vietnam" })
+  @IsOptional()
+  @IsString()
+  note?: string | null;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Inquiry Attribute DTOs - Complex attribute for inquiry form
+// ─────────────────────────────────────────────────────────────────────────────
+
+export class CreateInquiryAttributeDto {
+  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
+  @IsString()
+  productId!: string;
+
+  @ApiProperty({ example: "Shell Color" })
+  @IsString()
+  @MaxLength(180)
+  name!: string;
+
+  @ApiProperty({
+    enum: ProductAttributeGroup,
+    example: ProductAttributeGroup.SPECIFICATIONS,
+  })
+  @IsEnum(ProductAttributeGroup)
+  groupKey!: ProductAttributeGroup;
+
+  @ApiProperty({
+    enum: ProductAttributeType,
+    example: ProductAttributeType.SELECT,
+    description: "Type of inquiry field: text, number, select",
+  })
+  @IsEnum(ProductAttributeType)
+  type!: ProductAttributeType;
+
+  @ApiPropertyOptional({ example: "kg" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  unit?: string | null;
+
+  @ApiPropertyOptional({ example: "Natural brown" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  defaultValue?: string | null;
+
+  @ApiPropertyOptional({ example: "Select shell color" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  placeholder?: string | null;
+
+  @ApiPropertyOptional({
+    example: "*Shelf life depends on proper storage...",
+  })
+  @IsOptional()
+  @IsString()
+  note?: string | null;
+
+  @ApiPropertyOptional({ example: "Product Overview" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(180)
+  sectionLabel?: string | null;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  @ApiPropertyOptional({
+    type: [ProductAttributeOptionInputDto],
+    description: "Options for select-type attributes",
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProductAttributeOptionInputDto)
+  options?: ProductAttributeOptionInputDto[];
+}
