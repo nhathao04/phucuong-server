@@ -156,6 +156,12 @@ export class ProductAttributeMappingSummaryDto {
   @ApiProperty({ example: true })
   required!: boolean;
 
+  @ApiProperty({
+    example: true,
+    description: "Whether this attribute is shown on the inquiry form.",
+  })
+  isInquiryField!: boolean;
+
   @ApiProperty({ example: 0 })
   sortOrder!: number;
 
@@ -511,4 +517,192 @@ export class ProductListResponseDto {
 
   @ApiProperty({ example: 3 })
   totalPages!: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Inquiry Order Config — bundles everything FE needs for Step 2 / Step 3 form.
+// Returned by GET /products/:identifier/order-config and the staff equivalent.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export class InquiryOrderAttributeOptionDto {
+  @ApiProperty({ example: 34 })
+  id!: number;
+
+  @ApiProperty({ example: "Medium" })
+  value!: string;
+
+  @ApiProperty({ example: 0 })
+  sortOrder!: number;
+
+  @ApiProperty({ example: true })
+  isActive!: boolean;
+
+  @ApiProperty({
+    example: false,
+    description:
+      "When true, picking this option reveals a free-form input on the FE — the buyer types their own value (sent to server as customValue alongside optionId).",
+  })
+  isCustomTrigger!: boolean;
+
+  @ApiPropertyOptional({
+    example: "Describe your preferred size (e.g. 14 cm)",
+    description: "Placeholder text shown in the free-form input next to the Custom option.",
+  })
+  customPlaceholder!: string | null;
+}
+
+export class InquiryOrderAttributeMappingDto {
+  @ApiProperty({ example: 1 })
+  id!: number;
+
+  @ApiProperty({ example: 12 })
+  attributeId!: number;
+
+  @ApiProperty({ example: "coconut_size" })
+  code!: string;
+
+  @ApiProperty({ example: "Coconut Size" })
+  name!: string;
+
+  @ApiProperty({
+    enum: ProductAttributeGroup,
+    description:
+      "Use groupKey to group mappings into 'specifications' / 'packing' / etc. on the inquiry form.",
+  })
+  groupKey!: ProductAttributeGroup;
+
+  @ApiProperty({ enum: ProductAttributeType })
+  type!: ProductAttributeType;
+
+  @ApiPropertyOptional({ example: "cm" })
+  unit!: string | null;
+
+  @ApiPropertyOptional({ example: "Medium" })
+  defaultValue!: string | null;
+
+  @ApiPropertyOptional({ example: "Choose size" })
+  placeholder!: string | null;
+
+  @ApiPropertyOptional()
+  footnote!: string | null;
+
+  @ApiProperty({ example: true })
+  required!: boolean;
+
+  @ApiProperty({
+    example: true,
+    description:
+      "When false, this attribute is hidden from the inquiry form (used only for catalog/listing). When true, FE renders the field in Step 2.",
+  })
+  isInquiryField!: boolean;
+
+  @ApiProperty({ example: 0 })
+  sortOrder!: number;
+
+  @ApiPropertyOptional({ example: 34 })
+  defaultOptionId!: number | null;
+
+  @ApiProperty({
+    type: [InquiryOrderAttributeOptionDto],
+    description: "All available options (for select-type attributes).",
+  })
+  @Type(() => InquiryOrderAttributeOptionDto)
+  options!: InquiryOrderAttributeOptionDto[];
+}
+
+export class InquiryOrderContainerConfigDto {
+  @ApiProperty({ example: 1 })
+  id!: number;
+
+  @ApiProperty({ example: "40HQ" })
+  containerCode!: string;
+
+  @ApiProperty({ example: "40' High Cube Dry Container" })
+  containerName!: string;
+
+  @ApiProperty({ example: "28.50" })
+  capacityMt!: string;
+
+  @ApiProperty({ example: true })
+  isDefault!: boolean;
+}
+
+export class InquiryOrderCountryConfigDto {
+  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440010" })
+  countryId!: string;
+
+  @ApiProperty({ example: "VN" })
+  countryCode!: string;
+
+  @ApiProperty({ example: "Vietnam" })
+  countryName!: string;
+
+  @ApiPropertyOptional({ example: "20" })
+  moqMt!: string | null;
+
+  @ApiPropertyOptional({ example: "1 x 40HQ" })
+  moqLabel!: string | null;
+
+  @ApiPropertyOptional({ example: 14 })
+  leadTimeDays!: number | null;
+
+  @ApiProperty({ example: true })
+  isActive!: boolean;
+}
+
+export class InquiryOrderTradeTermDto {
+  @ApiProperty({ example: 1 })
+  id!: number;
+
+  @ApiProperty({ example: "FOB" })
+  code!: string;
+
+  @ApiProperty({ example: "Free On Board" })
+  name!: string;
+
+  @ApiProperty({ example: true })
+  isActive!: boolean;
+
+  @ApiProperty({ example: false })
+  isDefault!: boolean;
+}
+
+export class ProductOrderConfigDto {
+  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
+  productId!: string;
+
+  @ApiProperty({ example: "Whole Dried Coconut" })
+  productName!: string;
+
+  @ApiProperty({ example: "whole-dried-coconut" })
+  productSlug!: string;
+
+  @ApiProperty({ example: "PC-DRIED-001" })
+  productCode!: string | null;
+
+  @ApiProperty({
+    type: [InquiryOrderAttributeMappingDto],
+    description:
+      "Product-specific order attributes with full option lists. FE renders them in Step 2 grouped by groupKey.",
+  })
+  attributeMappings!: InquiryOrderAttributeMappingDto[];
+
+  @ApiProperty({
+    type: [InquiryOrderContainerConfigDto],
+    description: "Container capacities used by the Container Qty auto-calculator.",
+  })
+  containerConfigs!: InquiryOrderContainerConfigDto[];
+
+  @ApiProperty({
+    type: [InquiryOrderCountryConfigDto],
+    description:
+      "Per-country MOQ + lead time. FE forwards destinationCountryId so the server can resolve MOQ in Step 2.",
+  })
+  countryConfigs!: InquiryOrderCountryConfigDto[];
+
+  @ApiProperty({
+    type: [InquiryOrderTradeTermDto],
+    description: "Trade terms selectable in Step 3 (FOB / CNF / CIF …).",
+  })
+  tradeTerms!: InquiryOrderTradeTermDto[];
 }

@@ -43,6 +43,14 @@ export class ProductAttributeOptionDto {
 
   @ApiProperty({ example: true })
   isActive!: boolean;
+
+  @ApiProperty({ example: false })
+  isCustomTrigger!: boolean;
+
+  @ApiPropertyOptional({
+    example: "Describe your preferred size",
+  })
+  customPlaceholder!: string | null;
 }
 
 export class CreateProductAttributeDto {
@@ -107,6 +115,15 @@ export class CreateProductAttributeDto {
   isActive?: boolean;
 
   @ApiPropertyOptional({
+    example: true,
+    description:
+      "When true (default), this attribute is shown on the public inquiry form (Step 2). When false, it stays in the catalog/listing/admin only and is hidden from buyers. Useful for internal notes, packaging details only used by ops, etc.",
+  })
+  @IsOptional()
+  @IsBoolean()
+  isInquiryField?: boolean;
+
+  @ApiPropertyOptional({
     type: [ProductAttributeOptionInputDto],
     description: "Options for select-type attributes.",
   })
@@ -167,6 +184,11 @@ export class UpdateProductAttributeDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  isInquiryField?: boolean;
 }
 
 export class ProductAttributeResponseDto {
@@ -203,6 +225,13 @@ export class ProductAttributeResponseDto {
   @ApiProperty({ example: true })
   isActive!: boolean;
 
+  @ApiProperty({
+    example: true,
+    description:
+      "Whether this attribute is shown on the public inquiry form (Step 2). False = hidden from buyers, visible only in catalog/listing.",
+  })
+  isInquiryField!: boolean;
+
   @ApiProperty({ type: [ProductAttributeOptionDto] })
   options!: ProductAttributeOptionDto[];
 
@@ -237,6 +266,23 @@ export class AddAttributeOptionDto {
   @Type(() => Number)
   @IsInt()
   sortOrder?: number;
+
+  @ApiPropertyOptional({
+    example: false,
+    description:
+      "When true, picking this option on the inquiry form reveals a free-form input. The buyer types their own value (sent as customValue alongside optionId).",
+  })
+  @IsOptional()
+  @IsBoolean()
+  isCustomTrigger?: boolean;
+
+  @ApiPropertyOptional({
+    example: "Describe your preferred size (e.g. 14 cm)",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  customPlaceholder?: string;
 }
 
 export class UpdateAttributeOptionDto {
@@ -256,4 +302,17 @@ export class UpdateAttributeOptionDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({ example: false })
+  @IsOptional()
+  @IsBoolean()
+  isCustomTrigger?: boolean;
+
+  @ApiPropertyOptional({
+    example: "Describe your preferred size (e.g. 14 cm)",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  customPlaceholder?: string;
 }

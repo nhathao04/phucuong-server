@@ -30,6 +30,7 @@ import { ProductListQueryDto } from "./dto/product-list-query.dto";
 import {
   ProductDetailDto,
   ProductListResponseDto,
+  ProductOrderConfigDto,
 } from "./dto/product-response.dto";
 import { ProductsService } from "./products.service";
 import { ProductListQueryDto as PublicProductListQueryDto } from "./dto/product-list-query.dto";
@@ -109,6 +110,22 @@ export class ProductsController {
   ): Promise<ProductDetailDto> {
     return this.productsService.updateStaffProduct(id, updateProductDto);
   }
+
+  @Get(":id/order-config")
+  @ApiOperation({
+    summary: "Get inquiry order config (staff)",
+    description:
+      "Returns attribute mappings with full options + container configs + country MOQ + trade terms. Used by staff to preview the public inquiry form for a product.",
+  })
+  @ApiParam({
+    name: "id",
+    description: "Product UUID or slug",
+    example: "550e8400-e29b-41d4-a716-446655440000",
+  })
+  @ApiResponse({ status: 200, type: ProductOrderConfigDto })
+  orderConfig(@Param("id") id: string): Promise<ProductOrderConfigDto> {
+    return this.productsService.getOrderConfig(id);
+  }
 }
 
 // ─────────────────────── Public ───────────────────────
@@ -148,5 +165,23 @@ export class PublicProductsController {
   @ApiResponse({ status: 200, type: ProductDetailDto })
   detail(@Param("identifier") identifier: string): Promise<ProductDetailDto> {
     return this.productsService.getPublicDetail(identifier);
+  }
+
+  @Get(":identifier/order-config")
+  @ApiOperation({
+    summary: "Get inquiry order config (public)",
+    description:
+      "Returns the trimmed payload (attribute mappings + options + container + country MOQ + trade terms) used to render the Inquiry Step 2 / Step 3 form. Accepts UUID or slug.",
+  })
+  @ApiParam({
+    name: "identifier",
+    description: "Product UUID or slug",
+    example: "whole-dried-coconut",
+  })
+  @ApiResponse({ status: 200, type: ProductOrderConfigDto })
+  orderConfig(
+    @Param("identifier") identifier: string,
+  ): Promise<ProductOrderConfigDto> {
+    return this.productsService.getPublicOrderConfig(identifier);
   }
 }
