@@ -139,12 +139,15 @@ export class PublicCertificatesController {
   @ApiOperation({
     summary: "List active certificates (public)",
     description:
-      "Returns certificates used by at least one product (excludes orphaned " +
-      "rows that are no longer attached to any product).",
+      "Returns all certificates that are not marked as inactive/expired. " +
+      "All active certificates are returned regardless of whether they are attached to any product.",
   })
   @ApiResponse({ status: 200, type: [CertificateResponseDto] })
   async list(): Promise<CertificateResponseDto[]> {
     const all = await this.certificatesService.list({});
-    return all.filter((cert) => cert.productCount > 0);
+    // Filter out certificates explicitly marked as inactive/expired
+    return all.filter(
+      (cert) => cert.status !== "inactive" && cert.status !== "expired",
+    );
   }
 }

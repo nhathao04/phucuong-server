@@ -305,7 +305,7 @@ export class InquiriesService {
       });
 
       const commercialData = {
-        tradeTerm: dto.tradeTerm,
+        tradeTerm: dto.tradeTerm ?? null,
         paymentTerm: dto.paymentTerm ?? null,
         expectedDeliveryDate: dto.expectedDeliveryDate ?? null,
       };
@@ -323,10 +323,9 @@ export class InquiriesService {
       // 2) Upsert requirement row (cert list + free-form notes)
       const reqRepo = manager.getRepository(InquiryRequirement);
       let requirement = await reqRepo.findOne({ where: { inquiryId } });
+      const certIdList = dto.certificateRequired?.length ? dto.certificateRequired : [];
       const reqData = {
-        certificateRequired: (dto.certificateRequired ?? []).map((id) => ({
-          id,
-        })),
+        certificateRequired: certIdList.map((id) => ({ id })),
         additionalRequirements: dto.additionalRequirements
           ? [{ text: dto.additionalRequirements }]
           : [],
@@ -340,39 +339,49 @@ export class InquiriesService {
       }
 
       // 3) Sync inquiry_certificate rows (replaces previous selection).
-      //    Validate every certificateId exists so FK violations become 400
+      //    Validates every certificateId exists so FK violations become 400
       //    rather than opaque 500s on submit.
       const certRepo = manager.getRepository(InquiryCertificate);
       const certificateRepo = manager.getRepository(Certificate);
-      if (dto.certificateRequired && dto.certificateRequired.length > 0) {
-        const certIds = Array.from(
-          new Set(dto.certificateRequired),
+
+      // Delete existing records first
+      await certRepo.delete({ inquiryId });
+
+      // Save other documents (free-text) with null certificateId
+      const otherDocs = dto.otherDocuments?.filter((d) => d?.trim());
+      if (otherDocs?.length) {
+        await certRepo.save(
+          otherDocs.map((text) =>
+            certRepo.create({ inquiryId, certificateId: null as any, otherText: text.trim() }),
+          ),
         );
+      }
+
+      // Validate and save certificate IDs
+      const uniqueCertIds = dto.certificateRequired?.filter((id) => id?.trim());
+      if (uniqueCertIds?.length) {
         const found = await certificateRepo.find({
-          where: { id: In(certIds) },
+          where: { id: In(uniqueCertIds) },
           select: { id: true },
         });
         const foundIds = new Set(found.map((c) => c.id));
-        const missing = certIds.filter((cid) => !foundIds.has(cid));
+        const missing = uniqueCertIds.filter((cid) => !foundIds.has(cid));
         if (missing.length) {
           throw new BadRequestException(
             `Certificate(s) not found: ${missing.join(", ")}`,
           );
         }
-        await certRepo.delete({ inquiryId });
         await certRepo.save(
-          certIds.map((certificateId) =>
+          uniqueCertIds.map((certificateId) =>
             certRepo.create({ inquiryId, certificateId }),
           ),
         );
-      } else {
-        await certRepo.delete({ inquiryId });
       }
 
       // 4) Persist commercial/requirements on the Inquiry row
       //    (notes field mirrors additionalRequirements for cross-module reads)
       await manager.getRepository(Inquiry).update(inquiryId, {
-        tradeTerm: dto.tradeTerm,
+        tradeTerm: dto.tradeTerm ?? null,
         paymentTerm: dto.paymentTerm ?? null,
         expectedDeliveryDate: dto.expectedDeliveryDate ?? null,
         notes: dto.additionalRequirements ?? null,
@@ -383,10 +392,10 @@ export class InquiriesService {
       });
 
       await this.recordStepEvent(manager, inquiryId, 3, InquiryAction.CONTINUE, {
-        tradeTerm: dto.tradeTerm,
-        paymentTerm: dto.paymentTerm,
-        expectedDeliveryDate: dto.expectedDeliveryDate,
-        certificateRequired: dto.certificateRequired ?? [],
+        tradeTerm: dto.tradeTerm ?? null,
+        paymentTerm: dto.paymentTerm ?? null,
+        expectedDeliveryDate: dto.expectedDeliveryDate ?? null,
+        certificateRequired: certIdList,
         additionalRequirements: dto.additionalRequirements ?? null,
       });
 
@@ -558,6 +567,18 @@ export class InquiriesService {
     });
   }
 
+  private async getProductName(
+    manager: EntityManager,
+    productId: string | null | undefined,
+  ): Promise<string | undefined> {
+    if (!productId) return undefined;
+    const product = await manager.getRepository(Product).findOne({
+      where: { id: productId },
+      select: { name: true },
+    });
+    return product?.name;
+  }
+
   private async generateInquiryCode(manager: EntityManager): Promise<string> {
     const today = new Date();
     const dateStr = today.toISOString().slice(0, 10).replace(/-/g, "");
@@ -692,10 +713,13 @@ export class InquiriesService {
       }),
     );
 
-    // Load product attributes for email
+    // Load product info, attributes, and certificates for email
+    const productName = await this.getProductName(manager, inquiry.productId);
     const productAttributes = await this.loadProductAttributesForEmail(manager, inquiry.id);
+    const { certificates, otherDocuments } = await this.loadCertificatesForEmail(manager, inquiry.id);
 
     // Send via template
+    const calculation = await this.buildCalculationForEmail(manager, inquiry);
     const sent = await this.mailService.sendFromTemplate(EmailType.INTERNAL_NOTIFY, {
       customerName: customer?.fullName ?? inquiry.fullName ?? "Unknown",
       inquiryCode: inquiry.code,
@@ -707,7 +731,11 @@ export class InquiriesService {
       companyName: customer?.companyName ?? inquiry.companyName ?? undefined,
       tradeTerm: inquiry.tradeTerm ?? undefined,
       quantity: inquiry.quantity ?? undefined,
+      productName,
       productAttributes,
+      calculation,
+      certificates,
+      otherDocuments,
     });
 
     await manager.getRepository(Inquiry).update(inquiry.id, {
@@ -750,6 +778,80 @@ export class InquiriesService {
         return { label: attr.name, value };
       })
       .filter((item): item is { label: string; value: string } => item !== null);
+  }
+
+  private async loadCertificatesForEmail(
+    manager: EntityManager,
+    inquiryId: string,
+  ): Promise<{ certificates: string[]; otherDocuments: string[] }> {
+    const certRepo = manager.getRepository(InquiryCertificate);
+    const certificateRepo = manager.getRepository(Certificate);
+
+    const inquiryCerts = await certRepo.find({ where: { inquiryId } });
+
+    const certificates: string[] = [];
+    const otherDocuments: string[] = [];
+
+    for (const ic of inquiryCerts) {
+      if (ic.certificateId) {
+        const cert = await certificateRepo.findOne({
+          where: { id: ic.certificateId },
+          select: { name: true },
+        });
+        if (cert) certificates.push(cert.name);
+      } else if (ic.otherText) {
+        otherDocuments.push(ic.otherText);
+      }
+    }
+
+    return { certificates, otherDocuments };
+  }
+
+  private async buildCalculationForEmail(
+    manager: EntityManager,
+    inquiry: Inquiry,
+  ): Promise<{
+    estimatedContainers?: number | null;
+    containerCode?: string | null;
+    containerName?: string | null;
+    containerCapacityMt?: number | null;
+    moqMt?: number | null;
+    moqLabel?: string | null;
+    moqStatus?: "ok" | "below_moq" | "no_moq_config";
+    isValid?: boolean;
+  } | undefined> {
+    if (!inquiry.productId || !inquiry.quantity) return undefined;
+
+    const product = await manager.getRepository(Product).findOne({
+      where: { id: inquiry.productId },
+    });
+    if (!product) return undefined;
+
+    const quantityMt = parseFloat(inquiry.quantity);
+    if (isNaN(quantityMt)) return undefined;
+
+    const container = await this.resolveContainerConfig(manager, inquiry.productId);
+    const moq = await this.resolveMoqMt(manager, inquiry.productId, product, inquiry.destinationCountryId);
+
+    const containerCapacity = container ? Number(container.capacityMt) : 0;
+    const estimatedContainers =
+      containerCapacity > 0 ? Math.max(1, Math.ceil(quantityMt / containerCapacity)) : null;
+
+    let moqStatus: "ok" | "below_moq" | "no_moq_config" = "no_moq_config";
+    if (moq.moqMt !== null) {
+      moqStatus = quantityMt >= moq.moqMt ? "ok" : "below_moq";
+    }
+
+    return {
+      estimatedContainers,
+      containerCode: container?.containerCode ?? null,
+      containerName: container?.containerName ?? null,
+      containerCapacityMt: container ? Number(container.capacityMt) : null,
+      moqMt: moq.moqMt,
+      moqLabel: moq.moqLabel,
+      moqStatus,
+      isValid: moqStatus !== "below_moq",
+    };
   }
 
   private async sendCustomerAckEmail(
@@ -806,6 +908,9 @@ export class InquiriesService {
       }),
     );
 
+    // Get product name for email
+    const productName = await this.getProductName(manager, inquiry.productId);
+
     // Send via template
     await this.mailService.sendFromTemplate(
       EmailType.CUSTOMER_CONFIRM,
@@ -814,7 +919,7 @@ export class InquiriesService {
         inquiryCode: inquiry.code,
         inquiryId: inquiry.id,
         email: customer.email,
-        productName: inquiry.productId ?? undefined,
+        productName,
         tradeTerm: inquiry.tradeTerm ?? undefined,
         quantity: inquiry.quantity ?? undefined,
       },

@@ -174,13 +174,14 @@ export class InquiryStep3Dto {
   @IsUUID()
   inquiryId!: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     enum: InquiryTradeTerm,
     example: InquiryTradeTerm.FOB,
-    description: "Incoterms trade term",
+    description: "Incoterms trade term (optional)",
   })
+  @IsOptional()
   @IsEnum(InquiryTradeTerm)
-  tradeTerm!: InquiryTradeTerm;
+  tradeTerm?: InquiryTradeTerm | null;
 
   @ApiPropertyOptional({ enum: InquiryPaymentTerm })
   @IsOptional()
@@ -197,12 +198,23 @@ export class InquiryStep3Dto {
     example: ["uuid-of-cert-1", "uuid-of-cert-2"],
     description:
       "Certificate IDs the buyer requires (FDA, HACCP, Organic, …). " +
-      "Stored in inquiry_certificates when present.",
+      "Stored in inquiry_certificates when present. Optional.",
   })
   @IsOptional()
   @IsArray()
   @IsUUID("4", { each: true })
-  certificateRequired?: string[];
+  certificateRequired?: string[] | null;
+
+  @ApiPropertyOptional({
+    type: [String],
+    example: ["Phytosanitary Certificate", "Certificate of Origin"],
+    description: "List of other required documents (free-text). Stored in inquiry_certificates.otherText.",
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString()
+  @MaxLength(200, { each: true })
+  otherDocuments?: string[] | null;
 
   @ApiPropertyOptional({
     example: "Need special packaging for retail distribution.",

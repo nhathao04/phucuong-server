@@ -1,3 +1,14 @@
+export interface InquiryCalculationEmailData {
+  estimatedContainers?: number | null;
+  containerCode?: string | null;
+  containerName?: string | null;
+  containerCapacityMt?: number | null;
+  moqMt?: number | null;
+  moqLabel?: string | null;
+  moqStatus?: "ok" | "below_moq" | "no_moq_config";
+  isValid?: boolean;
+}
+
 export interface EmailTemplateData {
   customerName: string;
   inquiryCode: string | null;
@@ -11,6 +22,9 @@ export interface EmailTemplateData {
   whatsapp?: string;
   companyName?: string;
   productAttributes?: Array<{ label: string; value: string }>;
+  calculation?: InquiryCalculationEmailData;
+  certificates?: string[];
+  otherDocuments?: string[];
   [key: string]: unknown;
 }
 
@@ -349,6 +363,45 @@ function productAttributesSection(
   `;
 }
 
+function calculationSection(calc: InquiryCalculationEmailData | undefined): string {
+  if (!calc) return "";
+
+  const statusColor = calc.moqStatus === "ok" ? BRAND.green : calc.moqStatus === "below_moq" ? "#D32F2F" : "#FF8F00";
+  const statusText =
+    calc.moqStatus === "ok"
+      ? "✓ Meets MOQ"
+      : calc.moqStatus === "below_moq"
+        ? "⚠ Below MOQ"
+        : "— No MOQ Config";
+  const statusBg =
+    calc.moqStatus === "ok" ? BRAND.greenSoft : calc.moqStatus === "below_moq" ? "#FFEBEE" : "#FFF8E1";
+
+  return `
+    ${sectionHeading("Container & MOQ Calculation")}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+           style="background-color:${BRAND.greenSoft};border:1px solid ${BRAND.greenBorder};
+                  border-radius:8px;margin-bottom:20px;">
+      <tr><td style="padding:20px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+          ${infoRow("Container Type", calc.containerName ? `${calc.containerCode} — ${calc.containerName}` : calc.containerCode)}
+          ${infoRow("Container Capacity", calc.containerCapacityMt ? `${calc.containerCapacityMt} MT` : null)}
+          ${infoRow("Estimated Containers", calc.estimatedContainers ? `~${calc.estimatedContainers} container(s)` : null)}
+          ${infoRow("MOQ", calc.moqLabel ?? (calc.moqMt ? `${calc.moqMt} MT` : null))}
+        </table>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px;">
+          <tr>
+            <td style="padding:8px 12px;border-radius:6px;background-color:${statusBg};border:1px solid ${statusColor};">
+              <span style="font-size:13px;font-weight:600;color:${statusColor};">
+                ${statusText}
+              </span>
+            </td>
+          </tr>
+        </table>
+      </td></tr>
+    </table>
+  `;
+}
+
 export function internalNotificationTemplate(
   data: EmailTemplateData,
 ): { subject: string; html: string } {
@@ -356,7 +409,8 @@ export function internalNotificationTemplate(
     customerName, inquiryCode, inquiryId, step,
     productName, tradeTerm, quantity,
     email, phone, whatsapp, companyName,
-    productAttributes,
+    productAttributes, calculation,
+    certificates, otherDocuments,
   } = data;
 
   const stepLabel =
@@ -368,6 +422,30 @@ export function internalNotificationTemplate(
     dateStyle: "medium",
     timeStyle: "short",
   });
+
+  const certSection = (certificates?.length)
+    ? `<tr><td style="padding:4px 0;font-size:13px;"><strong>Certificates:</strong> ${escapeHtml(certificates.join(", "))}</td></tr>`
+    : "";
+
+  const otherDocSection = (otherDocuments?.length)
+    ? `<tr><td style="padding:4px 0;font-size:13px;"><strong>Other Documents:</strong> ${escapeHtml(otherDocuments.join(", "))}</td></tr>`
+    : "";
+
+  const requirementsSection = certSection || otherDocSection
+    ? `
+      ${sectionHeading("Requirements")}
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+             style="background-color:${BRAND.greenSoft};border:1px solid ${BRAND.greenBorder};
+                    border-radius:8px;margin-bottom:20px;">
+        <tr><td style="padding:16px 20px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+            ${certSection}
+            ${otherDocSection}
+          </table>
+        </td></tr>
+      </table>
+    `
+    : "";
 
   const content = `
     <p style="margin:0 0 20px 0;font-size:15px;color:${BRAND.text};line-height:1.7;">
@@ -406,6 +484,10 @@ export function internalNotificationTemplate(
     </table>
 
     ${productAttributesSection(productAttributes)}
+
+    ${calculationSection(calculation)}
+
+    ${requirementsSection}
 
     ${sectionHeading("Customer Information")}
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
