@@ -21,6 +21,10 @@ import {
   ProductApplicationInputDto,
   ProductApplicationAttributeInputDto,
 } from "./dto/product-request.dto";
+import {
+  CreateProductCategoryDto,
+  UpdateProductCategoryDto,
+} from "./dto/product-category.dto";
 import { ProductListQueryDto } from "./dto/product-list-query.dto";
 import {
   AssetSummaryDto,
@@ -2183,5 +2187,120 @@ export class ProductsService {
       createdAt: cat.createdAt,
       updatedAt: cat.updatedAt,
     }));
+  }
+
+  async getCategoryDetail(id: number): Promise<ProductCategorySummaryDto> {
+    const category = await this.productCategoriesRepository.findOne({
+      where: { id },
+    });
+    if (!category) {
+      throw new NotFoundException(`Product category ${id} not found`);
+    }
+    return this.toCategorySummaryDto(category);
+  }
+
+  async createCategory(
+    dto: CreateProductCategoryDto,
+  ): Promise<ProductCategorySummaryDto> {
+    const slug = this.resolveSlug(dto.name, dto.slug);
+
+    const existing = await this.productCategoriesRepository.findOne({
+      where: { slug },
+    });
+    if (existing) {
+      throw new ConflictException(
+        `Product category with slug "${slug}" already exists`,
+      );
+    }
+
+    const category = this.productCategoriesRepository.create({
+      name: dto.name,
+      slug,
+      description: dto.description ?? null,
+      sortOrder: dto.sortOrder ?? 0,
+      isActive: dto.isActive ?? true,
+    });
+
+    const saved = await this.productCategoriesRepository.save(category);
+    return this.toCategorySummaryDto(saved);
+  }
+
+  async updateCategory(
+    id: number,
+    dto: UpdateProductCategoryDto,
+  ): Promise<ProductCategorySummaryDto> {
+    const category = await this.productCategoriesRepository.findOne({
+      where: { id },
+    });
+    if (!category) {
+      throw new NotFoundException(`Product category ${id} not found`);
+    }
+
+    if (dto.slug !== undefined || dto.name !== undefined) {
+      const nextSlug = this.resolveSlug(
+        dto.name ?? category.name,
+        dto.slug ?? category.slug,
+      );
+      if (nextSlug !== category.slug) {
+        const clash = await this.productCategoriesRepository.findOne({
+          where: { slug: nextSlug },
+        });
+        if (clash && clash.id !== category.id) {
+          throw new ConflictException(
+            `Product category with slug "${nextSlug}" already exists`,
+          );
+        }
+        category.slug = nextSlug;
+      }
+    }
+
+    if (dto.name !== undefined) category.name = dto.name;
+    if (dto.description !== undefined)
+      category.description = dto.description ?? null;
+    if (dto.sortOrder !== undefined) category.sortOrder = dto.sortOrder;
+    if (dto.isActive !== undefined) category.isActive = dto.isActive;
+
+    const saved = await this.productCategoriesRepository.save(category);
+    return this.toCategorySummaryDto(saved);
+  }
+
+  async softDeleteCategory(id: number): Promise<ProductCategorySummaryDto> {
+    const category = await this.productCategoriesRepository.findOne({
+      where: { id },
+    });
+    if (!category) {
+      throw new NotFoundException(`Product category ${id} not found`);
+    }
+
+    const productRepo = this.productCategoriesRepository.manager.getRepository(
+      Product,
+    );
+    const productCount = await productRepo.count({
+      where: { productCategoryId: id },
+    });
+    if (productCount > 0) {
+      throw new ConflictException(
+        `Cannot delete category ${id}: ${productCount} product(s) still reference it`,
+      );
+    }
+
+    category.isActive = false;
+    const saved = await this.productCategoriesRepository.save(category);
+    return this.toCategorySummaryDto(saved);
+  }
+
+  private toCategorySummaryDto(
+    cat: ProductCategory,
+  ): ProductCategorySummaryDto {
+    return {
+      id: cat.id,
+      name: cat.name,
+      slug: cat.slug,
+      description: cat.description ?? null,
+      sortOrder: cat.sortOrder,
+      isActive: cat.isActive,
+      createdAt: cat.createdAt,
+      updatedAt: cat.updatedAt,
+    };
   }
 }

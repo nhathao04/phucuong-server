@@ -671,12 +671,29 @@ export class InquiriesService {
       }
     }
 
-    const fallback = product.quoteConfig?.moq;
-    if (fallback) {
-      const parsed = parseFloat(fallback);
-      if (!isNaN(parsed) && parsed > 0) {
-        return { moqMt: parsed, moqLabel: fallback };
+    const moqRaw = product.quoteConfig?.moq;
+    if (!moqRaw) return { moqMt: null, moqLabel: null };
+
+    // Format: "N x CONTAINER_CODE" (e.g. "1 x 40HQ", "2 x 20FT")
+    const containerMatch = moqRaw.match(/^(\d+(?:\.\d+)?)\s*[xX]\s*([A-Za-z0-9]+)$/);
+    if (containerMatch) {
+      const containerCount = parseFloat(containerMatch[1]);
+      const containerCode = containerMatch[2].toUpperCase();
+      const containerCfg = await manager
+        .getRepository(ProductContainerConfig)
+        .findOne({ where: { productId, containerCode } });
+      if (containerCfg) {
+        const capacity = parseFloat(containerCfg.capacityMt);
+        if (!isNaN(capacity) && capacity > 0) {
+          return { moqMt: containerCount * capacity, moqLabel: moqRaw };
+        }
       }
+    }
+
+    // Plain number format (e.g. "10" → 10 MT)
+    const parsed = parseFloat(moqRaw);
+    if (!isNaN(parsed) && parsed > 0) {
+      return { moqMt: parsed, moqLabel: moqRaw };
     }
 
     return { moqMt: null, moqLabel: null };
