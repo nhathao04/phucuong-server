@@ -50,6 +50,9 @@ export class ProductAttributeMapping {
   @Column({ type: "boolean", default: false })
   required!: boolean;
 
+  @Column({ type: "boolean", default: true })
+  isInquiryField!: boolean;
+
   @Column({ type: "integer", default: 0 })
   sortOrder!: number;
 

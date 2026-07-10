@@ -205,6 +205,16 @@ export class ProductAttributeMappingInputDto {
   @IsBoolean()
   required?: boolean;
 
+  @ApiPropertyOptional({
+    example: true,
+    description:
+      "When true, this attribute appears in the inquiry form for this product.",
+  })
+  @IsOptional()
+  @Transform(({ value }) => normalizeBoolean(value))
+  @IsBoolean()
+  isInquiryField?: boolean;
+
   @ApiPropertyOptional({ example: 0 })
   @IsOptional()
   @Type(() => Number)
@@ -524,6 +534,11 @@ export class ProductQuoteConfigFieldInputDto {
   @Transform(({ value }) => normalizeBoolean(value))
   @IsBoolean()
   required?: boolean;
+
+  @ApiPropertyOptional({ example: 0 })
+  @IsOptional()
+  @IsInt()
+  sortOrder?: number;
 
   @ApiPropertyOptional({ type: "array" })
   @IsOptional()

@@ -34,6 +34,13 @@ export class ProductAttributeOption {
   @Column({ type: "boolean", default: true })
   isActive!: boolean;
 
+  @Index()
+  @Column({ type: "boolean", default: false })
+  isCustomTrigger!: boolean;
+
+  @Column({ type: "varchar", length: 255, nullable: true })
+  customPlaceholder!: string | null;
+
   @CreateDateColumn({ type: "timestamp with time zone" })
   createdAt!: Date;
 

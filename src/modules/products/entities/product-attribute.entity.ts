@@ -77,6 +77,10 @@ export class ProductAttribute {
   @Column({ type: "boolean", default: true })
   isActive!: boolean;
 
+  @Index()
+  @Column({ type: "boolean", default: true })
+  isInquiryField!: boolean;
+
   @OneToMany(() => ProductAttributeOption, (option) => option.attribute)
   options!: ProductAttributeOption[];
 

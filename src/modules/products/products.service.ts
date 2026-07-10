@@ -34,6 +34,12 @@ import {
   ProductHeroStatDto,
   ProductListItemDto,
   ProductListResponseDto,
+  ProductOrderConfigDto,
+  InquiryOrderAttributeMappingDto,
+  InquiryOrderAttributeOptionDto,
+  InquiryOrderContainerConfigDto,
+  InquiryOrderCountryConfigDto,
+  InquiryOrderTradeTermDto,
   ProductPackagingOptionDto,
   ProductQuoteConfigDto,
   ProductQuoteConfigFieldDto,
@@ -78,6 +84,7 @@ type ProductConfigPayload = Partial<CreateProductDto & UpdateProductDto> & {
     defaultOptionId?: number | null;
     defaultOptionValue?: string | null;
     required?: boolean;
+    isInquiryField?: boolean;
     sortOrder?: number;
     metadata?: Record<string, unknown> | null;
   }>;
@@ -206,6 +213,7 @@ export class ProductsService {
       defaultOptionId: mapping.defaultOptionId,
       defaultOptionValue: mapping.defaultOption?.value ?? null,
       required: mapping.required,
+      isInquiryField: mapping.isInquiryField,
       sortOrder: mapping.sortOrder,
       metadata: mapping.metadata,
     };
@@ -712,14 +720,86 @@ export class ProductsService {
     );
   }
 
+  private buildAttributeMappingInputs(
+    input: CreateProductDto | UpdateProductDto,
+  ): {
+    hasExplicitMappings: boolean;
+    mappingInputs: NonNullable<ProductConfigPayload["attributeMappings"]>;
+  } {
+    const configInput = input as ProductConfigPayload;
+    const hasExplicitMappings = configInput.attributeMappings !== undefined;
+
+    if (hasExplicitMappings) {
+      return {
+        hasExplicitMappings: true,
+        mappingInputs: configInput.attributeMappings ?? [],
+      };
+    }
+
+    // Build inquiry field mappings from quoteConfig.fields
+    const quoteFields = configInput.quoteConfig?.fields;
+    if (quoteFields?.length) {
+      const mappingInputs: NonNullable<ProductConfigPayload["attributeMappings"]> =
+        [];
+      quoteFields.forEach((field, index) => {
+        mappingInputs.push({
+          attributeCode: field.key,
+          required: field.required ?? false,
+          isInquiryField: true,
+          sortOrder: field.sortOrder ?? index,
+          metadata: field.unit ? { unit: field.unit } : null,
+        });
+      });
+      return { hasExplicitMappings: false, mappingInputs };
+    }
+
+    // Build spec display mappings from attributeValues (isInquiryField=false)
+    if (!configInput.attributeValues?.length) {
+      return { hasExplicitMappings: false, mappingInputs: [] };
+    }
+
+    const seen = new Set<string>();
+    const mappingInputs: NonNullable<ProductConfigPayload["attributeMappings"]> =
+      [];
+
+    configInput.attributeValues.forEach((item, index) => {
+      const dedupeKey =
+        typeof item.attributeId === "number"
+          ? `id:${item.attributeId}`
+          : item.attributeCode?.trim().toLowerCase();
+
+      if (!dedupeKey || seen.has(dedupeKey)) {
+        return;
+      }
+
+      seen.add(dedupeKey);
+      mappingInputs.push({
+        attributeId: item.attributeId,
+        attributeCode: item.attributeCode,
+        required: item.required ?? false,
+        isInquiryField: false,
+        sortOrder: item.sortOrder ?? index,
+        metadata: null,
+      });
+    });
+
+    return { hasExplicitMappings: false, mappingInputs };
+  }
+
   private async syncAttributeMappings(
     manager: EntityManager,
     productId: string,
     input: CreateProductDto | UpdateProductDto,
   ): Promise<void> {
-    const configInput = input as ProductConfigPayload;
+    const { hasExplicitMappings, mappingInputs } =
+      this.buildAttributeMappingInputs(input);
 
-    if (!configInput.attributeMappings) {
+    if (mappingInputs.length === 0) {
+      if (hasExplicitMappings) {
+        await manager
+          .getRepository(ProductAttributeMapping)
+          .delete({ productId });
+      }
       return;
     }
 
@@ -729,36 +809,22 @@ export class ProductsService {
     const attributeRepository = manager.getRepository(ProductAttribute);
     const optionRepository = manager.getRepository(ProductAttributeOption);
 
-    await attributeMappingRepository.delete({ productId });
-
-    if (configInput.attributeMappings.length === 0) {
-      return;
+    if (hasExplicitMappings) {
+      await attributeMappingRepository.delete({ productId });
     }
 
     const attributeIds = [
       ...new Set(
-        configInput.attributeMappings
-          .map(
-            (
-              item: NonNullable<
-                ProductConfigPayload["attributeMappings"]
-              >[number],
-            ) => item.attributeId,
-          )
+        mappingInputs
+          .map((item) => item.attributeId)
           .filter((value): value is number => typeof value === "number"),
       ),
     ];
 
     const attributeCodes = [
       ...new Set(
-        configInput.attributeMappings
-          .map(
-            (
-              item: NonNullable<
-                ProductConfigPayload["attributeMappings"]
-              >[number],
-            ) => item.attributeCode?.trim().toLowerCase(),
-          )
+        mappingInputs
+          .map((item) => item.attributeCode?.trim().toLowerCase())
           .filter((value): value is string => Boolean(value)),
       ),
     ];
@@ -795,7 +861,7 @@ export class ProductsService {
       attributeId: number;
     }> = [];
 
-    for (const mappingInput of configInput.attributeMappings) {
+    for (const mappingInput of mappingInputs) {
       const resolvedById = mappingInput.attributeId
         ? attributesById.get(mappingInput.attributeId)
         : undefined;
@@ -873,7 +939,7 @@ export class ProductsService {
         .getOne();
     };
 
-    const mappings: ProductAttributeMapping[] = [];
+    const mappingsToSave: ProductAttributeMapping[] = [];
     for (const resolvedMapping of resolvedMappings) {
       const mappingInput = resolvedMapping.input;
       let resolvedDefaultOptionId: number | null = null;
@@ -907,19 +973,61 @@ export class ProductsService {
         }
       }
 
-      mappings.push(
+      const isInquiryField =
+        mappingInput.isInquiryField ?? (hasExplicitMappings ? true : false);
+
+      if (hasExplicitMappings) {
+        mappingsToSave.push(
+          attributeMappingRepository.create({
+            productId,
+            attributeId: resolvedMapping.attributeId,
+            defaultOptionId: resolvedDefaultOptionId,
+            required: mappingInput.required ?? false,
+            isInquiryField,
+            sortOrder: mappingInput.sortOrder ?? 0,
+            metadata: mappingInput.metadata ?? null,
+          }),
+        );
+        continue;
+      }
+
+      const existing = await attributeMappingRepository.findOne({
+        where: {
+          productId,
+          attributeId: resolvedMapping.attributeId,
+        },
+      });
+
+      if (existing) {
+        existing.required = mappingInput.required ?? existing.required;
+        existing.sortOrder = mappingInput.sortOrder ?? existing.sortOrder;
+        existing.metadata = mappingInput.metadata ?? existing.metadata;
+        if (mappingInput.isInquiryField !== undefined) {
+          existing.isInquiryField = mappingInput.isInquiryField;
+        }
+        if (resolvedDefaultOptionId !== null) {
+          existing.defaultOptionId = resolvedDefaultOptionId;
+        }
+        mappingsToSave.push(existing);
+        continue;
+      }
+
+      mappingsToSave.push(
         attributeMappingRepository.create({
           productId,
           attributeId: resolvedMapping.attributeId,
           defaultOptionId: resolvedDefaultOptionId,
           required: mappingInput.required ?? false,
+          isInquiryField,
           sortOrder: mappingInput.sortOrder ?? 0,
           metadata: mappingInput.metadata ?? null,
         }),
       );
     }
 
-    await attributeMappingRepository.save(mappings);
+    if (mappingsToSave.length > 0) {
+      await attributeMappingRepository.save(mappingsToSave);
+    }
   }
 
   private async syncContainerConfigs(
@@ -1391,8 +1499,8 @@ export class ProductsService {
     productId: string,
     input: CreateProductDto | UpdateProductDto,
   ): Promise<void> {
-    await this.syncAttributeMappings(manager, productId, input);
     await this.syncAttributeValues(manager, productId, input);
+    await this.syncAttributeMappings(manager, productId, input);
     await this.syncContainerConfigs(manager, productId, input);
     await this.syncCountryConfigs(manager, productId, input);
     await this.syncImages(manager, productId, input);
@@ -1629,5 +1737,155 @@ export class ProductsService {
 
     const detailProduct = await this.loadProductForDetail(product.id);
     return this.toDetailDto(detailProduct);
+  }
+
+  // ── Inquiry Order Config ──────────────────────────────────────────────────
+  // Trimmed payload: only the fields needed to build the Step 2 / Step 3 form
+  // on the public inquiry page, plus MOQ + container configs for auto-calc.
+
+  async getOrderConfig(identifier: string): Promise<ProductOrderConfigDto> {
+    const detail = await this.loadProductDetail(identifier, { includeDraft: true });
+    return this.toOrderConfigDto(detail);
+  }
+
+  async getPublicOrderConfig(identifier: string): Promise<ProductOrderConfigDto> {
+    const detail = await this.loadProductDetail(identifier, {
+      includeDraft: false,
+    });
+    return this.toOrderConfigDto(detail);
+  }
+
+  private async loadProductDetail(
+    identifier: string,
+    opts: { includeDraft: boolean },
+  ): Promise<Product> {
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        identifier,
+      );
+
+    const baseWhere = isUuid ? { id: identifier } : { slug: identifier };
+    const where = opts.includeDraft
+      ? baseWhere
+      : { ...baseWhere, status: ProductStatus.PUBLISHED, isActive: true };
+
+    const product = await this.productsRepository.findOne({ where });
+    if (!product) {
+      throw new NotFoundException("Product not found");
+    }
+
+    return (await this.productsRepository
+      .createQueryBuilder("product")
+      .leftJoinAndSelect(
+        "product.attributeMappings",
+        "attributeMappings",
+      )
+      .leftJoinAndSelect("attributeMappings.attribute", "attribute")
+      .leftJoinAndSelect(
+        "attributeMappings.defaultOption",
+        "defaultOption",
+      )
+      .leftJoinAndSelect("attribute.options", "attrOption")
+      .leftJoinAndSelect("product.containerConfigs", "containerConfigs")
+      .leftJoinAndSelect("product.countryConfigs", "countryConfigs")
+      .leftJoinAndSelect("countryConfigs.country", "country")
+      .leftJoinAndSelect("product.tradeTerms", "tradeTerms")
+      .leftJoinAndSelect("tradeTerms.tradeTerm", "tradeTerm")
+      .where("product.id = :id", { id: product.id })
+      .orderBy("attributeMappings.sortOrder", "ASC")
+      .addOrderBy("attrOption.sortOrder", "ASC")
+      .getOne()) as Product;
+  }
+
+  private toOrderConfigDto(product: Product): ProductOrderConfigDto {
+    // Public-facing endpoint — hide attributes that staff marked as
+    // isInquiryField=false (catalog-only, e.g. internal SKUs / spec notes).
+    const mappings: InquiryOrderAttributeMappingDto[] = (
+      product.attributeMappings ?? []
+    )
+      .filter((mapping) => mapping.isInquiryField !== false)
+      .slice()
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((mapping): InquiryOrderAttributeMappingDto => ({
+        id: mapping.id,
+        attributeId: mapping.attributeId,
+        code: mapping.attribute?.code ?? "",
+        name: mapping.attribute?.name ?? "",
+        groupKey: mapping.attribute?.groupKey ?? "other",
+        type: mapping.attribute?.type ?? "text",
+        unit: mapping.attribute?.unit ?? null,
+        defaultValue: mapping.attribute?.defaultValue ?? null,
+        placeholder: mapping.attribute?.placeholder ?? null,
+        footnote: mapping.attribute?.footnote ?? null,
+        required: mapping.required,
+        isInquiryField: mapping.isInquiryField,
+        sortOrder: mapping.sortOrder,
+        defaultOptionId: mapping.defaultOptionId ?? null,
+        options: (mapping.attribute?.options ?? [])
+          .slice()
+          .sort((a, b) => a.sortOrder - b.sortOrder)
+          .map(
+            (option): InquiryOrderAttributeOptionDto => ({
+              id: option.id,
+              value: option.value,
+              sortOrder: option.sortOrder,
+              isActive: option.isActive,
+              isCustomTrigger: option.isCustomTrigger ?? false,
+              customPlaceholder: option.customPlaceholder ?? null,
+            }),
+          ),
+      }));
+
+    const containers: InquiryOrderContainerConfigDto[] = (
+      product.containerConfigs ?? []
+    )
+      .slice()
+      .sort((a, b) => Number(a.capacityMt) - Number(b.capacityMt))
+      .map((config): InquiryOrderContainerConfigDto => ({
+        id: config.id,
+        containerCode: config.containerCode,
+        containerName: config.containerName,
+        capacityMt: String(config.capacityMt),
+        isDefault: config.isDefault,
+      }));
+
+    const countries: InquiryOrderCountryConfigDto[] = (
+      product.countryConfigs ?? []
+    )
+      .slice()
+      .filter((cfg) => cfg.isActive)
+      .map((cfg): InquiryOrderCountryConfigDto => ({
+        countryId: cfg.countryId,
+        countryCode: cfg.country?.code ?? "",
+        countryName: cfg.country?.name ?? "",
+        moqMt: cfg.moqMt ? String(cfg.moqMt) : null,
+        moqLabel: cfg.moqLabel ?? null,
+        leadTimeDays: cfg.leadTimeDays ?? null,
+        isActive: cfg.isActive,
+      }));
+
+    const tradeTerms: InquiryOrderTradeTermDto[] = (product.tradeTerms ?? [])
+      .map(
+        (pt): InquiryOrderTradeTermDto => ({
+          id: pt.id,
+          code: pt.tradeTerm?.code ?? "",
+          name: pt.tradeTerm?.name ?? "",
+          isActive: pt.tradeTerm?.isActive ?? true,
+          isDefault: pt.isDefault,
+        }),
+      )
+      .filter((term) => term.isActive)
+      .sort((a, b) => a.code.localeCompare(b.code));
+
+    return {
+      productId: product.id,
+      productName: product.name,
+      productSlug: product.slug,
+      productCode: product.productCode ?? null,
+      attributeMappings: mappings,
+      containerConfigs: containers,
+      countryConfigs: countries,
+      tradeTerms,
+    };
   }
 }
