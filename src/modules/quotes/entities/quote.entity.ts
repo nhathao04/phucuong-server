@@ -13,13 +13,6 @@ import { QuoteCertificate } from "./quote-certificate.entity";
 import { User } from "../../users/entities/user.entity";
 import { Certificate } from "../../inquiries/entities/certificate.entity";
 
-export enum QuoteStatus {
-  PENDING = "pending",
-  QUOTED = "quoted",
-  REJECTED = "rejected",
-  EXPIRED = "expired",
-}
-
 @Entity({ name: "quotes" })
 export class Quote {
   @PrimaryGeneratedColumn("increment", { type: "int" })
@@ -65,8 +58,8 @@ export class Quote {
   notes!: string | null;
 
   // Quote Response (from staff)
-  @Column({ type: "enum", enum: QuoteStatus, default: QuoteStatus.PENDING })
-  status!: QuoteStatus;
+  @Column({ type: "boolean", default: false })
+  contacted!: boolean;
 
   @Column({ type: "decimal", precision: 14, scale: 2, nullable: true })
   quotedPrice!: string | null;

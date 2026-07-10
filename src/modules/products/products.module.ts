@@ -6,6 +6,8 @@ import { ProductAttribute } from "./entities/product-attribute.entity";
 import { ProductAttributeMapping } from "./entities/product-attribute-mapping.entity";
 import { ProductAttributeOption } from "./entities/product-attribute-option.entity";
 import { ProductAttributeValue } from "./entities/product-attribute-value.entity";
+import { ProductCertificate } from "./entities/product-certificate.entity";
+import { ProductFaq } from "./entities/product-faq.entity";
 import { ProductImage } from "./entities/product-image.entity";
 import { Product } from "./entities/product.entity";
 import { ProductCategory } from "./entities/product-category.entity";
@@ -16,11 +18,15 @@ import { ProductTargetBuyer } from "./entities/product-target-buyer.entity";
 import { ProductTechnicalSpecification } from "./entities/product-technical-specification.entity";
 import { ProductTradeTerm } from "./entities/product-trade-term.entity";
 import { ProductWhyChooseUs } from "./entities/product-why-choose-us.entity";
+import { ProductApplication } from "./entities/product-application.entity";
+import { ProductApplicationAttribute } from "./entities/product-application-attribute.entity";
 import { TradeTerm } from "./entities/trade-term.entity";
 import { Country } from "../geography/entities/country.entity";
+import { Certificate } from "../inquiries/entities/certificate.entity";
 import {
   ProductsController,
   PublicProductsController,
+  StaffProductCategoriesController,
 } from "./products.controller";
 import { ProductsService } from "./products.service";
 import { ProductAttributesModule } from "./product-attributes.module";
@@ -36,20 +42,25 @@ import { ProductAttributesModule } from "./product-attributes.module";
       ProductAttributeValue,
       ProductContainerConfig,
       ProductCountryConfig,
+      ProductFaq,
+      ProductCertificate,
       ProductImage,
       ProductTechnicalSpecification,
       ProductPackagingOption,
       ProductTargetBuyer,
       ProductWhyChooseUs,
+      ProductApplication,
+      ProductApplicationAttribute,
       TradeTerm,
       ProductTradeTerm,
       Country,
+      Certificate,
     ]),
     UsersModule,
     MediaModule,
     ProductAttributesModule,
   ],
-  controllers: [ProductsController, PublicProductsController],
+  controllers: [ProductsController, PublicProductsController, StaffProductCategoriesController],
   providers: [ProductsService],
 })
 export class ProductsModule {}

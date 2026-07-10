@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
   Req,
   UseGuards,
@@ -129,7 +130,11 @@ export class StaffInquiriesController {
     summary: "Assign a staff/admin user to an inquiry",
     description:
       "Creates an `InquiryAssignment` row. Only users whose `Role.name` is `admin` or `staff` " +
-      "can be assigned. An activity log entry is recorded.",
+      "can be assigned. An activity log entry is recorded.\n\n" +
+      "Rules:\n" +
+      "- If the inquiry is unassigned or already held by the same user, this succeeds.\n" +
+      "- If another user currently holds it, pass `force: true` to take it over " +
+      "(closes their active assignment and creates yours).",
   })
   @ApiParam({ name: "id", description: "Inquiry UUID" })
   @ApiResponse({ status: 200, type: InquiryDetailDto })
@@ -143,12 +148,16 @@ export class StaffInquiriesController {
 
   @Delete(":id/assignments/:assignmentId")
   @ApiOperation({
-    summary: "Unassign staff from an inquiry",
-    description: "Sets `unassignedAt` on the assignment row (soft-unassign).",
+    summary: "Release your own assignment on an inquiry",
+    description:
+      "Sets `unassignedAt` on the assignment row (soft-unassign). " +
+      "You can only unassign your own assignment — releasing another staff's " +
+      "assignment requires them to do it themselves, or `assignStaff` with `force: true`.",
   })
   @ApiParam({ name: "id", description: "Inquiry UUID" })
   @ApiParam({ name: "assignmentId", description: "Assignment row numeric id" })
   @ApiResponse({ status: 200, type: InquiryDetailDto })
+  @ApiResponse({ status: 403, description: "Caller is not the owner of this assignment" })
   unassign(
     @Param("id", ParseUUIDPipe) id: string,
     @Param("assignmentId", ParseIntPipe) assignmentId: number,
@@ -157,5 +166,23 @@ export class StaffInquiriesController {
     return this.adminService.unassignStaff(id, assignmentId, {
       sub: req.user?.sub ?? "",
     });
+  }
+
+  // ── Toggle contacted ──────────────────────────────────────────────────────
+
+  @Put(":id/contacted")
+  @ApiOperation({
+    summary: "Toggle the `contacted` flag (true ↔ false) on an inquiry",
+    description:
+      "Flips the `contacted` boolean. When set to true, also records `contactedAt` " +
+      "and `contactedById`. An activity log entry is written each time.",
+  })
+  @ApiParam({ name: "id", description: "Inquiry UUID" })
+  @ApiResponse({ status: 200, type: InquiryDetailDto })
+  toggleContacted(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Req() req: Request & { user?: { sub: string } },
+  ): Promise<InquiryDetailDto> {
+    return this.adminService.toggleContacted(id, { sub: req.user?.sub ?? "" });
   }
 }

@@ -154,6 +154,28 @@ export class InquiryStep2Dto {
   @Type(() => InquiryAttributeValueDto)
   attributes?: InquiryAttributeValueDto[];
 
+  @ApiPropertyOptional({
+    example: "FOB",
+    description:
+      "Preferred trade term. If provided, the calculation uses this term's default container. " +
+      "If omitted, the calculation falls back to the product's default container config.",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  tradeTermCode?: string | null;
+
+  @ApiPropertyOptional({
+    example: "40HQ",
+    description:
+      "Preferred container type. If provided, the calculation uses this container's capacity. " +
+      "If omitted, falls back to (1) the default container for the selected trade term, then (2) the global default container.",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  containerCode?: string | null;
+
   @ApiPropertyOptional({ example: "uuid-of-destination-country" })
   @IsOptional()
   @IsUUID()

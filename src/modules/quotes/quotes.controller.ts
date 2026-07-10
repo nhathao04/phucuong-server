@@ -17,6 +17,7 @@ import {
   ApiResponse,
   ApiParam,
   ApiBearerAuth,
+  ApiQuery,
 } from "@nestjs/swagger";
 import { QuotesService } from "./quotes.service";
 import { CreateQuoteDto, UpdateQuoteDto } from "./dto/quote-request.dto";
@@ -25,7 +26,6 @@ import {
   QuoteListResponseDto,
   QuotePublicResponseDto,
 } from "./dto/quote-response.dto";
-import { QuoteStatus } from "./entities/quote.entity";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 
 @ApiTags("Quotes")
@@ -37,14 +37,14 @@ export class QuotesController {
   // Public endpoints
   // ─────────────────────────────────────────────────────────────────────────────
 
-  @Post("api/quotes")
+  @Post("quotes")
   @ApiOperation({ summary: "Submit a quote request" })
   @ApiResponse({ status: 201, type: QuotePublicResponseDto })
   async create(@Body() dto: CreateQuoteDto): Promise<QuotePublicResponseDto> {
     return this.quotesService.create(dto);
   }
 
-  @Get("api/quotes/:code")
+  @Get("quotes/:code")
   @ApiOperation({ summary: "Get quote status by code" })
   @ApiParam({ name: "code", example: "QT-2026-00001" })
   @ApiResponse({ status: 200, type: QuotePublicResponseDto })
@@ -56,28 +56,30 @@ export class QuotesController {
   // Staff endpoints (protected)
   // ─────────────────────────────────────────────────────────────────────────────
 
-  @Get("api/staff/quotes")
+  @Get("staff/quotes")
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: "List all quotes (staff)" })
+  @ApiQuery({ name: "page", required: false })
+  @ApiQuery({ name: "limit", required: false })
+  @ApiQuery({ name: "search", required: false })
+  @ApiQuery({ name: "assignedToId", required: false })
   @ApiResponse({ status: 200, type: QuoteListResponseDto })
   async findAll(
     @Query("page") page?: number,
     @Query("limit") limit?: number,
-    @Query("status") status?: QuoteStatus,
     @Query("search") search?: string,
     @Query("assignedToId") assignedToId?: string,
   ): Promise<QuoteListResponseDto> {
     return this.quotesService.findAllStaff({
       page: page ? Number(page) : 1,
       limit: limit ? Number(limit) : 20,
-      status,
       search,
       assignedToId,
     });
   }
 
-  @Get("api/staff/quotes/:id")
+  @Get("staff/quotes/:id")
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: "Get quote details (staff)" })
@@ -89,7 +91,7 @@ export class QuotesController {
     return this.quotesService.findOneStaff(id);
   }
 
-  @Put("api/staff/quotes/:id")
+  @Put("staff/quotes/:id")
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: "Update quote (staff)" })
@@ -104,7 +106,21 @@ export class QuotesController {
     return this.quotesService.updateStaff(id, dto, staffId);
   }
 
-  @Put("api/staff/quotes/:id/assign")
+  @Put("staff/quotes/:id/contacted")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: "Toggle contacted flag (true ↔ false) on a quote",
+  })
+  @ApiParam({ name: "id", example: 1 })
+  @ApiResponse({ status: 200, type: QuoteResponseDto })
+  async toggleContacted(
+    @Param("id", ParseIntPipe) id: number,
+  ): Promise<QuoteResponseDto> {
+    return this.quotesService.toggleContacted(id);
+  }
+
+  @Put("staff/quotes/:id/assign")
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: "Assign quote to staff" })
@@ -117,7 +133,7 @@ export class QuotesController {
     return this.quotesService.assignQuote(id, assignedToId);
   }
 
-  @Delete("api/staff/quotes/:id")
+  @Delete("staff/quotes/:id")
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: "Delete quote (staff)" })

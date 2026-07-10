@@ -5,6 +5,7 @@ import { ProductAttribute } from "./entities/product-attribute.entity";
 import { ProductAttributeOption } from "./entities/product-attribute-option.entity";
 import { ProductAttributeValue } from "./entities/product-attribute-value.entity";
 import { ProductAttributeMapping } from "./entities/product-attribute-mapping.entity";
+import { Product } from "./entities/product.entity";
 import { ProductAttributesService } from "./product-attributes.service";
 import {
   ProductAttributesController,
@@ -19,6 +20,7 @@ import {
       ProductAttributeOption,
       ProductAttributeValue,
       ProductAttributeMapping,
+      Product,
     ]),
   ],
   controllers: [

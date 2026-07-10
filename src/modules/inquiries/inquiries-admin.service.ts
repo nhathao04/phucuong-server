@@ -1,15 +1,24 @@
 import {
   BadRequestException,
+  ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Brackets, Repository } from "typeorm";
+import { Brackets, IsNull, Repository } from "typeorm";
 
 import { Inquiry } from "./entities/inquiry.entity";
 import { InquiryActivity } from "./entities/inquiry-activity.entity";
 import { InquiryAssignment } from "./entities/inquiry-assignment.entity";
-import { AssignmentRole, InquiryActivityAction, EmailOutboxStatus, InquiryFormStatus, InquiryStatus } from "./entities/inquiry.enums";
+import {
+  AssignmentRole,
+  InquiryActivityAction,
+  EmailOutboxStatus,
+  InquiryContactStatus,
+  InquiryFormStatus,
+  InquiryStatus,
+} from "./entities/inquiry.enums";
 import { Customer } from "../customers/entities/customer.entity";
 import { Product } from "../products/entities/product.entity";
 import { Country } from "../geography/entities/country.entity";
@@ -69,6 +78,89 @@ export class InquiriesAdminService {
     private readonly userRepo: Repository<User>,
   ) {}
 
+  // ── OWNER LOOKUP (single source of truth: inquiry_assignments) ──────────
+
+  /**
+   * Resolve the current owner of an inquiry from `inquiry_assignments`
+   * (most recent row with unassignedAt IS NULL). Returns `null` if the
+   * inquiry is unassigned.
+   */
+  private async getCurrentOwner(
+    inquiryId: string,
+  ): Promise<
+    | {
+        assignmentId: number;
+        staffUserId: string;
+        fullName: string | null;
+        email: string | null;
+      }
+    | null
+  > {
+    const owner = await this.assignmentRepo
+      .createQueryBuilder("a")
+      .innerJoin(User, "u", "u.id = a.staffUserId")
+      .where("a.inquiryId = :inquiryId", { inquiryId })
+      .andWhere("a.unassignedAt IS NULL")
+      .select(["a.id AS assignmentId", "a.staffUserId AS \"staffUserId\"", "u.fullName AS \"fullName\"", "u.email AS email"])
+      .orderBy("a.assignedAt", "DESC")
+      .limit(1)
+      .getRawOne<{
+        assignmentId: number;
+        staffUserId: string;
+        fullName: string | null;
+        email: string | null;
+      }>();
+
+    return owner ?? null;
+  }
+
+  /**
+   * Batch version of `getCurrentOwner` for list/detail responses. Performs
+   * a single SQL query that joins the latest active assignment per inquiry.
+   */
+  private async getCurrentOwnersForInquiries(
+    inquiryIds: string[],
+  ): Promise<
+    Map<
+      string,
+      {
+        assignmentId: number;
+        staffUserId: string;
+        fullName: string | null;
+        email: string | null;
+      }
+    >
+  > {
+    if (inquiryIds.length === 0) return new Map();
+
+    // PostgreSQL DISTINCT ON picks one row per inquiryId (the most recent
+    // active assignment), then join user table for name/email.
+    const rows = await this.assignmentRepo.query<
+      Array<{
+        inquiryId: string;
+        assignmentId: number;
+        staffUserId: string;
+        fullName: string | null;
+        email: string | null;
+      }>
+    >(
+      `SELECT DISTINCT ON (a."inquiryId")
+              a."inquiryId" AS "inquiryId",
+              a.id         AS "assignmentId",
+              a."staffUserId" AS "staffUserId",
+              u."fullName" AS "fullName",
+              u.email      AS email
+       FROM inquiry_assignments a
+       INNER JOIN users u ON u.id = a."staffUserId"
+       WHERE a."inquiryId" = ANY($1::uuid[])
+         AND a."unassignedAt" IS NULL
+       ORDER BY a."inquiryId", a."assignedAt" DESC`,
+      [inquiryIds],
+    );
+
+    return new Map(rows.map((r) => [r.inquiryId, r] as const));
+  }
+
   // ── LIST ──────────────────────────────────────────────────────────────────
 
   async list(query: InquiryListQueryDto): Promise<InquiryListResponseDto> {
@@ -78,6 +170,23 @@ export class InquiriesAdminService {
     const sortDir = (query.sortDir ?? "DESC").toUpperCase() as "ASC" | "DESC";
 
     const qb = this.inquiryRepo.createQueryBuilder("i");
+
+    if (query.assignedToId) {
+      qb.andWhere(
+        `EXISTS (
+          SELECT 1 FROM inquiry_assignments a
+          WHERE a."inquiryId" = i.id
+            AND a."unassignedAt" IS NULL
+            AND a."staffUserId" = :assignedToId
+        )`,
+        { assignedToId: query.assignedToId },
+      );
+    }
+    if (query.contactStatus) {
+      qb.andWhere("i.contactStatus = :contactStatus", {
+        contactStatus: query.contactStatus,
+      });
+    }
 
 
     if (query.search) {
@@ -135,11 +244,39 @@ export class InquiriesAdminService {
       : [];
     const productNameMap = new Map(products.map((p) => [p.id, p.name] as const));
 
+    // Hydrate destination country names
+    const countryIds = Array.from(
+      new Set(rows.map((r) => r.destinationCountryId).filter((id): id is string => !!id)),
+    );
+    const countries = countryIds.length
+      ? await this.countryRepo.find({
+          where: countryIds.map((id) => ({ id })),
+          select: ["id", "name"],
+        })
+      : [];
+    const countryNameMap = new Map(countries.map((c) => [c.id, c.name] as const));
+
+    // Hydrate current owner (most recent active assignment) for each row.
+    const currentOwnerByInquiryId = await this.getCurrentOwnersForInquiries(
+      rows.map((r) => r.id),
+    );
+
     const items: InquiryListItemDto[] = rows.map((row) => {
       const productName = row.productId
         ? productNameMap.get(row.productId) ?? null
         : null;
-      return this.mapListItem(row, productName);
+      const destinationCountry = row.destinationCountryId
+        ? countryNameMap.get(row.destinationCountryId) ?? row.destinationCountry ?? null
+        : row.destinationCountry ?? null;
+      const owner = currentOwnerByInquiryId.get(row.id) ?? null;
+      return this.mapListItem(
+        row,
+        productName,
+        destinationCountry,
+        owner?.staffUserId ?? null,
+        owner?.fullName ?? null,
+        owner?.email ?? null,
+      );
     });
 
     return {
@@ -166,7 +303,16 @@ export class InquiriesAdminService {
       productName = p?.name ?? null;
     }
 
-    const [activities, assignments] = await Promise.all([
+    let destinationCountry: string | null = inquiry.destinationCountry ?? null;
+    if (inquiry.destinationCountryId) {
+      const c = await this.countryRepo.findOne({
+        where: { id: inquiry.destinationCountryId },
+        select: ["id", "name"],
+      });
+      destinationCountry = c?.name ?? destinationCountry;
+    }
+
+    const [activities, assignments, currentOwner] = await Promise.all([
       this.activityRepo.find({
         where: { inquiryId: id },
         order: { createdAt: "DESC" },
@@ -176,9 +322,12 @@ export class InquiriesAdminService {
         where: { inquiryId: id },
         order: { assignedAt: "DESC" },
       }),
+      this.getCurrentOwner(id),
     ]);
 
-    const staffIds = assignments.map((a) => a.staffUserId);
+    const staffIds = Array.from(
+      new Set(assignments.map((a) => a.staffUserId)),
+    );
     const staffUsers = staffIds.length
       ? await this.userRepo.find({
           where: staffIds.map((sid) => ({ id: sid })),
@@ -188,7 +337,14 @@ export class InquiriesAdminService {
     const staffMap = new Map(staffUsers.map((u) => [u.id, u] as const));
 
     return {
-      ...this.mapListItem(inquiry, productName),
+      ...this.mapListItem(
+        inquiry,
+        productName,
+        destinationCountry,
+        currentOwner?.staffUserId ?? null,
+        currentOwner?.fullName ?? null,
+        currentOwner?.email ?? null,
+      ),
       phone: inquiry.phone,
       whatsapp: inquiry.whatsapp,
       ipAddress: inquiry.ipAddress ?? null,
@@ -298,6 +454,25 @@ export class InquiriesAdminService {
 
   // ── ASSIGN / UNASSIGN STAFF ───────────────────────────────────────────────
 
+  /**
+   * Derive `contactStatus` from the inquiry's current assignment + contact state.
+   * - NOT_CONTACTED when no staff is assigned
+   * - ASSIGNED      when staff is assigned but contact not yet completed
+   * - CONTACTED     when staff has completed contact (preserved across unassign)
+   */
+  private deriveContactStatus(
+    assignedToId: string | null,
+    currentStatus: InquiryContactStatus,
+  ): InquiryContactStatus {
+    // Preserve CONTACTED: if it was already marked, keep it.
+    if (currentStatus === InquiryContactStatus.CONTACTED) {
+      return InquiryContactStatus.CONTACTED;
+    }
+    return assignedToId
+      ? InquiryContactStatus.ASSIGNED
+      : InquiryContactStatus.NOT_CONTACTED;
+  }
+
   async assignStaff(
     id: string,
     dto: AssignStaffDto,
@@ -316,7 +491,31 @@ export class InquiriesAdminService {
       throw new BadRequestException("User is not admin or staff");
     }
 
-    await this.assignmentRepo.save(
+    const currentOwner = await this.getCurrentOwner(id);
+
+    // Assignment rules (no admin concept here — any staff can do anything):
+    // - Unassigned inquiry  → anyone with admin/staff role can claim it.
+    // - Same staff re-claim → idempotent no-op.
+    // - Already owned by a DIFFERENT staff → caller must pass `force: true`
+    //   (the other staff is expected to have self-unassigned first; force
+    //   is the "override" path if they didn't).
+    if (currentOwner && currentOwner.staffUserId !== staff.id && !dto.force) {
+      throw new ConflictException(
+        `Inquiry is currently held by ${currentOwner.fullName ?? currentOwner.staffUserId}. ` +
+          "Ask them to unassign first, or pass `force: true` to take it over.",
+      );
+    }
+
+    // Close the previous active assignment when we're taking over. Skipped
+    // on idempotent self-claim so we don't bump unassignedAt needlessly.
+    if (currentOwner && currentOwner.staffUserId !== staff.id) {
+      await this.assignmentRepo.update(
+        { id: currentOwner.assignmentId },
+        { unassignedAt: new Date() },
+      );
+    }
+
+    const newAssignment = await this.assignmentRepo.save(
       this.assignmentRepo.create({
         inquiryId: id,
         staffUserId: dto.staffUserId,
@@ -324,8 +523,16 @@ export class InquiriesAdminService {
       }),
     );
 
+    // contactStatus is auto-derived: any active assignment (or fresh assign)
+    // moves the status to ASSIGNED (preserving CONTACTED).
+    inquiry.contactStatus = this.deriveContactStatus(
+      staff.id,
+      inquiry.contactStatus,
+    );
+    await this.inquiryRepo.save(inquiry);
+
     const desc = dto.comment
-      ? `Assigned to ${staff.fullName ?? staff.email}${dto.comment ? `: ${dto.comment}` : ""}`
+      ? `Assigned to ${staff.fullName ?? staff.email}: ${dto.comment}`
       : `Assigned to ${staff.fullName ?? staff.email}`;
 
     await this.activityRepo.save(
@@ -349,20 +556,147 @@ export class InquiriesAdminService {
       where: { id: assignmentId, inquiryId },
     });
     if (!assignment) throw new NotFoundException("Assignment not found");
+    if (assignment.unassignedAt) {
+      throw new BadRequestException("Assignment is already closed");
+    }
+
+    // Authorization: a staff can only unassign their own assignment.
+    // There is no admin override here — if a different staff needs to take
+    // over, they must wait for the current holder to self-unassign first,
+    // or use `assignStaff` with `force: true` (which closes this assignment
+    // for them).
+    const isSelf = assignment.staffUserId === actor.sub;
+    if (!isSelf) {
+      throw new ForbiddenException(
+        "You can only unassign your own assignment. Ask the current holder to release it, or call assignStaff with `force: true`.",
+      );
+    }
 
     assignment.unassignedAt = new Date();
     await this.assignmentRepo.save(assignment);
+
+    // After a self-unassign, contactStatus auto-derives:
+    // - If another active assignment still exists (rare — only when a staff
+    //   had multiple open rows from before this fix), fall back to ASSIGNED.
+    // - Otherwise:
+    //     - CONTACTED stays as CONTACTED (the work was already done).
+    //     - anything else drops back to NOT_CONTACTED so the inquiry is
+    //       visibly back in the pool.
+    const inquiry = await this.inquiryRepo.findOne({ where: { id: inquiryId } });
+    if (inquiry) {
+      const nextOwner = await this.assignmentRepo.findOne({
+        where: { inquiryId, unassignedAt: IsNull() as unknown as undefined },
+        order: { assignedAt: "DESC" },
+      });
+      inquiry.contactStatus = this.deriveContactStatus(
+        nextOwner ? nextOwner.staffUserId : null,
+        // Reset the "anchor" so CONTACTED is preserved but everything else
+        // reverts to NOT_CONTACTED on the way back to the pool.
+        inquiry.contactStatus === InquiryContactStatus.CONTACTED
+          ? InquiryContactStatus.CONTACTED
+          : InquiryContactStatus.NOT_CONTACTED,
+      );
+      await this.inquiryRepo.save(inquiry);
+    }
 
     await this.activityRepo.save(
       this.activityRepo.create({
         inquiryId,
         action: InquiryActivityAction.CUSTOMER_CHANGED,
-        description: `Unassigned staff (assignment ${assignmentId})`,
+        description: `Staff self-unassigned (assignment ${assignmentId})`,
         createdByUserId: actor.sub,
       }),
     );
 
     return this.getDetail(inquiryId);
+  }
+
+  // ── SET CONTACT STATUS ────────────────────────────────────────────────────
+
+  /**
+   * Mark the inquiry as CONTACTED (i.e. staff has finished contacting the
+   * customer). Requires an active assignment. Idempotent.
+   */
+  async markContacted(
+    id: string,
+    actor: JwtUserPayload,
+  ): Promise<InquiryDetailDto> {
+    const inquiry = await this.inquiryRepo.findOne({ where: { id } });
+    if (!inquiry) throw new NotFoundException("Inquiry not found");
+
+    const currentOwner = await this.getCurrentOwner(id);
+    if (!currentOwner) {
+      throw new BadRequestException(
+        "Cannot mark as contacted: inquiry has no assigned staff",
+      );
+    }
+
+    if (inquiry.contactStatus !== InquiryContactStatus.CONTACTED) {
+      inquiry.contactStatus = InquiryContactStatus.CONTACTED;
+      inquiry.contactedAt = new Date();
+      inquiry.contactedById = actor.sub || null;
+      await this.inquiryRepo.save(inquiry);
+    }
+
+    await this.activityRepo.save(
+      this.activityRepo.create({
+        inquiryId: id,
+        action: InquiryActivityAction.CUSTOMER_CHANGED,
+        description: "Marked as contacted",
+        createdByUserId: actor.sub,
+      }),
+    );
+
+    return this.getDetail(id);
+  }
+
+  /**
+   * Roll back CONTACTED → ASSIGNED. Use when staff accidentally marked
+   * the inquiry as contacted and wants to undo.
+   */
+  async unmarkContacted(
+    id: string,
+    actor: JwtUserPayload,
+  ): Promise<InquiryDetailDto> {
+    const inquiry = await this.inquiryRepo.findOne({ where: { id } });
+    if (!inquiry) throw new NotFoundException("Inquiry not found");
+
+    if (inquiry.contactStatus === InquiryContactStatus.CONTACTED) {
+      const currentOwner = await this.getCurrentOwner(id);
+      inquiry.contactStatus = this.deriveContactStatus(
+        currentOwner?.staffUserId ?? null,
+        InquiryContactStatus.ASSIGNED,
+      );
+      inquiry.contactedAt = null;
+      inquiry.contactedById = null;
+      await this.inquiryRepo.save(inquiry);
+    }
+
+    await this.activityRepo.save(
+      this.activityRepo.create({
+        inquiryId: id,
+        action: InquiryActivityAction.CUSTOMER_CHANGED,
+        description: "Unmarked as contacted",
+        createdByUserId: actor.sub,
+      }),
+    );
+
+    return this.getDetail(id);
+  }
+
+  // ── TOGGLE CONTACTED (legacy PUT /:id/contacted) ─────────────────────────
+
+  async toggleContacted(
+    id: string,
+    actor: JwtUserPayload,
+  ): Promise<InquiryDetailDto> {
+    const inquiry = await this.inquiryRepo.findOne({ where: { id } });
+    if (!inquiry) throw new NotFoundException("Inquiry not found");
+
+    if (inquiry.contactStatus === InquiryContactStatus.CONTACTED) {
+      return this.unmarkContacted(id, actor);
+    }
+    return this.markContacted(id, actor);
   }
 
   // ── STATS ─────────────────────────────────────────────────────────────────
@@ -413,17 +747,26 @@ export class InquiriesAdminService {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  private mapListItem(row: Inquiry, productName: string | null): InquiryListItemDto {
+  private mapListItem(
+    row: Inquiry,
+    productName: string | null,
+    destinationCountry: string | null,
+    assignedToId: string | null = null,
+    assignedToName: string | null = null,
+    assignedToEmail: string | null = null,
+  ): InquiryListItemDto {
     return {
       id: row.id,
       code: row.code,
       customerName: row.fullName ?? null,
       companyName: row.companyName ?? null,
       email: row.email ?? null,
+      phone: row.phone ?? null,
+      whatsapp: row.whatsapp ?? null,
       productId: row.productId ?? null,
       productName,
       destinationCountryId: row.destinationCountryId ?? null,
-      destinationCountry: row.destinationCountry ?? null,
+      destinationCountry,
       tradeTerm: row.tradeTerm ?? null,
       quantity: row.quantity !== undefined && row.quantity !== null ? String(row.quantity) : null,
       quantityUnit: row.quantityUnit ?? null,
@@ -431,7 +774,11 @@ export class InquiriesAdminService {
       formStatus: row.formStatus,
       salesStatus: row.salesStatus ?? null,
       currentStep: row.currentStep,
-      isCompleted: row.isCompleted,
+      contactStatus: row.contactStatus,
+      contactedAt: row.contactedAt ?? null,
+      assignedToId,
+      assignedToName,
+      assignedToEmail,
       internalEmailSent: row.internalEmailSent,
       customerEmailSent: row.customerEmailSent,
       leadCapturedAt: row.leadCapturedAt ?? null,
