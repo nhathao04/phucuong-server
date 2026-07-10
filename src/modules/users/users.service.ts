@@ -234,4 +234,10 @@ export class UsersService {
     await this.usersRepository.update(id, { isActive });
     return this.findByIdWithRole(id) as Promise<User>;
   }
+
+  async listRoles(): Promise<Role[]> {
+    return this.rolesRepository.find({
+      order: { createdAt: "ASC" },
+    });
+  }
 }

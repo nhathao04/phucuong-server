@@ -24,6 +24,7 @@ import {
   UserListResponseDto,
   UserResponseDto,
 } from "./dto/user-admin.dto";
+import { RoleResponseDto } from "./dto/role-response.dto";
 import { UsersService } from "./users.service";
 
 @ApiTags("Users")
@@ -50,6 +51,13 @@ export class UsersController {
       createRoleDto.name,
       createRoleDto.description,
     );
+  }
+
+  @Get("users/roles")
+  @ApiOperation({ summary: "List all roles" })
+  @ApiResponse({ status: 200, type: [RoleResponseDto] })
+  listRoles(): Promise<RoleResponseDto[]> {
+    return this.usersService.listRoles();
   }
 
   @Get("users/:id")
