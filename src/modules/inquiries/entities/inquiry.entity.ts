@@ -14,8 +14,10 @@ import { Customer } from "../../customers/entities/customer.entity";
 import { Product } from "../../products/entities/product.entity";
 import { Country } from "../../geography/entities/country.entity";
 import { Port } from "../../geography/entities/port.entity";
+import { User } from "../../users/entities/user.entity";
 import {
   InquiryFormStatus,
+  InquiryContactStatus,
   InquiryPaymentTerm,
   InquiryQuantityUnit,
   InquiryStatus,
@@ -109,8 +111,27 @@ export class Inquiry {
   })
   salesStatus!: InquirySalesStatus | null;
 
-  @Column({ type: "boolean", default: false })
-  isCompleted!: boolean;
+  // Primary staff owner currently handling this inquiry is **derived** from
+  // `inquiry_assignments` (the most recent row with unassignedAt IS NULL).
+  // It is no longer denormalized on this table — single source of truth.
+
+  @Index()
+  @Column({
+    type: "enum",
+    enum: InquiryContactStatus,
+    default: InquiryContactStatus.NOT_CONTACTED,
+  })
+  contactStatus!: InquiryContactStatus;
+
+  @Column({ type: "timestamp with time zone", nullable: true })
+  contactedAt!: Date | null;
+
+  @Column({ type: "uuid", nullable: true })
+  contactedById!: string | null;
+
+  @ManyToOne(() => User, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({ name: "contactedById" })
+  contactedBy!: User | null;
 
   @Column({ type: "timestamp with time zone", nullable: true })
   lastStepSavedAt!: Date | null;

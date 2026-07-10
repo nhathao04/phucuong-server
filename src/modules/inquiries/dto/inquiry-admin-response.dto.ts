@@ -19,7 +19,11 @@ export class InquiryListItemDto {
   @ApiProperty() formStatus!: string;
   @ApiPropertyOptional() salesStatus!: string | null;
   @ApiProperty() currentStep!: number;
-  @ApiProperty() isCompleted!: boolean;
+  @ApiProperty() contactStatus!: string;
+  @ApiPropertyOptional() contactedAt!: Date | null;
+  @ApiPropertyOptional() assignedToId!: string | null;
+  @ApiPropertyOptional() assignedToName!: string | null;
+  @ApiPropertyOptional() assignedToEmail!: string | null;
   @ApiProperty() internalEmailSent!: boolean;
   @ApiProperty() customerEmailSent!: boolean;
   @ApiPropertyOptional() leadCapturedAt!: Date | null;

@@ -108,14 +108,6 @@ export class CreateBlogDto {
 
   @ApiPropertyOptional({
     example:
-      "Practical notes to prepare better inquiries, specs, and shipment plans.",
-  })
-  @IsOptional()
-  @IsString()
-  excerpt?: string | null;
-
-  @ApiPropertyOptional({
-    example:
       "https://cdn.example.com/blog/export-guide-thumb.webp",
     description:
       "Thumbnail image URL. Asset will be auto-created in database.",
@@ -134,17 +126,8 @@ export class CreateBlogDto {
   thumbnailAssetId?: string | null;
 
   @ApiPropertyOptional({
-    example: "https://cdn.example.com/blog/export-guide-cover.webp",
-    description: "Cover image URL under title. Asset will be auto-created.",
-  })
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  coverImageUrl?: string | null;
-
-  @ApiPropertyOptional({
     example: "550e8400-e29b-41d4-a716-446655440001",
-    description: "Cover image Asset UUID (alternative to coverImageUrl).",
+    description: "Cover image Asset UUID.",
   })
   @IsOptional()
   @IsUUID()
@@ -231,12 +214,6 @@ export class CreateBlogDto {
   @IsString()
   contentText?: string | null;
 
-  @ApiPropertyOptional({ example: 5, description: "Estimated read time in minutes." })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  readTimeMinutes?: number | null;
-
   @ApiPropertyOptional({
     example: "Export Guide for Coconut Product Buyers",
     description: "SEO title (defaults to blog title if not provided).",
@@ -282,21 +259,6 @@ export class CreateBlogDto {
   @Transform(({ value }) => normalizeBoolean(value))
   @IsBoolean()
   isFeatured?: boolean;
-
-  @ApiPropertyOptional({ example: 0, description: "Display order." })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  sortOrder?: number;
-
-  @ApiPropertyOptional({
-    example: true,
-    description: "Active status. Defaults to true.",
-  })
-  @IsOptional()
-  @Transform(({ value }) => normalizeBoolean(value))
-  @IsBoolean()
-  isActive?: boolean;
 }
 
 export class UpdateBlogDto {
@@ -318,14 +280,6 @@ export class UpdateBlogDto {
   @Length(2, 220)
   @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
   slug?: string;
-
-  @ApiPropertyOptional({
-    example:
-      "Updated practical notes to prepare better inquiries and shipment plans.",
-  })
-  @IsOptional()
-  @IsString()
-  excerpt?: string | null;
 
   @ApiPropertyOptional({
     example:
@@ -378,15 +332,6 @@ export class UpdateBlogDto {
   thumbnailAssetId?: string | null;
 
   @ApiPropertyOptional({
-    example: "https://cdn.example.com/blog/new-cover.webp",
-    description: "New cover image URL. Asset will be auto-created.",
-  })
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  coverImageUrl?: string | null;
-
-  @ApiPropertyOptional({
     example: "550e8400-e29b-41d4-a716-446655440001",
     description: "Cover image Asset UUID.",
   })
@@ -410,12 +355,6 @@ export class UpdateBlogDto {
   @ValidateNested({ each: true })
   @Type(() => BlogAssetRefDto)
   assets?: BlogAssetRefDto[];
-
-  @ApiPropertyOptional({ example: 7, description: "Updated read time in minutes." })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  readTimeMinutes?: number | null;
 
   @ApiPropertyOptional({
     example: "Updated SEO Title",
@@ -459,19 +398,4 @@ export class UpdateBlogDto {
   @Transform(({ value }) => normalizeBoolean(value))
   @IsBoolean()
   isFeatured?: boolean;
-
-  @ApiPropertyOptional({ example: 1, description: "Display order." })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  sortOrder?: number;
-
-  @ApiPropertyOptional({
-    example: true,
-    description: "Active status.",
-  })
-  @IsOptional()
-  @Transform(({ value }) => normalizeBoolean(value))
-  @IsBoolean()
-  isActive?: boolean;
 }

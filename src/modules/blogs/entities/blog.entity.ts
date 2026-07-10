@@ -36,9 +36,6 @@ export class Blog {
   slug!: string;
 
   @Column({ type: "text", nullable: true })
-  excerpt!: string | null;
-
-  @Column({ type: "text", nullable: true })
   contentHtml!: string | null;
 
   @Column({ type: "jsonb", nullable: true })
@@ -49,9 +46,6 @@ export class Blog {
 
   @Column({ type: "varchar", length: 500, nullable: true })
   thumbnailUrl!: string | null;
-
-  @Column({ type: "varchar", length: 500, nullable: true })
-  coverImageUrl!: string | null;
 
   @Index()
   @Column({ type: "uuid", nullable: true })
@@ -72,9 +66,6 @@ export class Blog {
   @OneToMany(() => BlogAsset, (blogAsset) => blogAsset.blog)
   assets!: BlogAsset[];
 
-  @Column({ type: "integer", nullable: true })
-  readTimeMinutes!: number | null;
-
   @Column({ type: "varchar", length: 220, nullable: true })
   seoTitle!: string | null;
 
@@ -94,12 +85,6 @@ export class Blog {
 
   @Column({ type: "boolean", default: false })
   isFeatured!: boolean;
-
-  @Column({ type: "integer", default: 0 })
-  sortOrder!: number;
-
-  @Column({ type: "boolean", default: true })
-  isActive!: boolean;
 
   @Column({ type: "timestamp with time zone", nullable: true })
   publishedAt!: Date | null;

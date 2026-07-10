@@ -90,7 +90,6 @@ export class BlogsService {
       id: blog.id,
       title: blog.title,
       slug: blog.slug,
-      excerpt: blog.excerpt,
       thumbnailUrl: blog.thumbnailUrl,
       thumbnail: toAssetSummary(blog.thumbnailAsset),
       category: this.toCategoryDto(blog),
@@ -99,11 +98,8 @@ export class BlogsService {
         name: t.name,
         slug: t.slug,
       })),
-      readTimeMinutes: blog.readTimeMinutes,
       status: blog.status,
       isFeatured: blog.isFeatured,
-      sortOrder: blog.sortOrder,
-      isActive: blog.isActive,
       publishedAt: blog.publishedAt,
       author: this.toAuthorDto(blog),
       seoTitle: blog.seoTitle,
@@ -117,7 +113,6 @@ export class BlogsService {
   private toDetailDto(blog: Blog): BlogDetailDto {
     return {
       ...this.toSummaryDto(blog),
-      coverImageUrl: blog.coverImageUrl,
       coverImage: toAssetSummary(blog.coverImage),
       assets: this.toAssetLinkDtos(blog),
       tableOfContents: this.toToc(blog),
@@ -259,24 +254,19 @@ export class BlogsService {
       .leftJoinAndSelect("blog.coverImage", "coverImage")
       .leftJoinAndSelect("blog.assets", "assets")
       .leftJoinAndSelect("assets.asset", "assetRef")
-      .orderBy("blog.sortOrder", "ASC")
-      .addOrderBy("blog.createdAt", "DESC")
+      .orderBy("blog.createdAt", "DESC")
       .skip((page - 1) * limit)
       .take(limit);
 
     if (query.search?.trim()) {
       qb.andWhere(
-        "(blog.title ILIKE :search OR blog.slug ILIKE :search OR blog.excerpt ILIKE :search)",
+        "(blog.title ILIKE :search OR blog.slug ILIKE :search)",
         { search: `%${query.search.trim()}%` },
       );
     }
 
     if (query.status) {
       qb.andWhere("blog.status = :status", { status: query.status });
-    }
-
-    if (typeof query.isActive === "boolean") {
-      qb.andWhere("blog.isActive = :isActive", { isActive: query.isActive });
     }
 
     const [blogs, total] = await qb.getManyAndCount();
@@ -313,18 +303,14 @@ export class BlogsService {
           const blog = blogRepository.create({
             title: dto.title,
             slug,
-            excerpt: dto.excerpt ?? null,
             contentHtml: dto.contentHtml ?? null,
             contentJson: dto.contentJson ?? null,
             contentText: dto.contentText ?? null,
-            readTimeMinutes: dto.readTimeMinutes ?? null,
             seoTitle: dto.seoTitle ?? null,
             metaDescription: dto.metaDescription ?? null,
             focusKeyword: dto.focusKeyword ?? null,
             status,
             isFeatured: dto.isFeatured ?? false,
-            sortOrder: dto.sortOrder ?? 0,
-            isActive: dto.isActive ?? true,
             publishedAt: status === BlogStatus.PUBLISHED ? new Date() : null,
             authorId,
           });
@@ -344,15 +330,7 @@ export class BlogsService {
             saved.thumbnailAssetId = dto.thumbnailAssetId;
           }
 
-          if (dto.coverImageUrl) {
-            saved.coverImageAssetId = await this.ensureAssetFromUrl(
-              manager,
-              dto.coverImageUrl,
-              saved.id,
-              AssetOwnerType.BLOG,
-            );
-            saved.coverImageUrl = dto.coverImageUrl;
-          } else if (dto.coverImageAssetId) {
+          if (dto.coverImageAssetId) {
             saved.coverImageAssetId = dto.coverImageAssetId;
           }
 
@@ -395,7 +373,6 @@ export class BlogsService {
           }
 
           if (dto.title !== undefined) blog.title = dto.title;
-          if (dto.excerpt !== undefined) blog.excerpt = dto.excerpt ?? null;
           if (dto.contentHtml !== undefined)
             blog.contentHtml = dto.contentHtml ?? null;
           if (dto.contentJson !== undefined)
@@ -423,36 +400,18 @@ export class BlogsService {
             blog.thumbnailAsset = null;
           }
 
-          // Handle coverImageUrl - auto-create asset from URL
-          if (dto.coverImageUrl !== undefined) {
-            blog.coverImageUrl = dto.coverImageUrl ?? null;
-            if (dto.coverImageUrl) {
-              blog.coverImageAssetId = await this.ensureAssetFromUrl(
-                manager,
-                dto.coverImageUrl,
-                blog.id,
-                AssetOwnerType.BLOG,
-              );
-            } else {
-              blog.coverImageAssetId = null;
-              blog.coverImage = null;
-            }
-          }
+          // Handle coverImageAssetId
           if (dto.coverImageAssetId !== undefined) {
             blog.coverImageAssetId = dto.coverImageAssetId ?? null;
             blog.coverImage = null;
           }
 
-          if (dto.readTimeMinutes !== undefined)
-            blog.readTimeMinutes = dto.readTimeMinutes ?? null;
           if (dto.seoTitle !== undefined) blog.seoTitle = dto.seoTitle ?? null;
           if (dto.metaDescription !== undefined)
             blog.metaDescription = dto.metaDescription ?? null;
           if (dto.focusKeyword !== undefined)
             blog.focusKeyword = dto.focusKeyword ?? null;
           if (dto.isFeatured !== undefined) blog.isFeatured = dto.isFeatured;
-          if (dto.sortOrder !== undefined) blog.sortOrder = dto.sortOrder;
-          if (dto.isActive !== undefined) blog.isActive = dto.isActive;
 
           if (dto.status !== undefined && dto.status !== blog.status) {
             blog.status = dto.status;
@@ -503,14 +462,12 @@ export class BlogsService {
       .leftJoinAndSelect("blog.tags", "tags")
       .leftJoinAndSelect("blog.thumbnailAsset", "thumbnailAsset")
       .where("blog.status = :status", { status: BlogStatus.PUBLISHED })
-      .andWhere("blog.isActive = true")
-      .orderBy("blog.sortOrder", "ASC")
-      .addOrderBy("blog.publishedAt", "DESC")
+      .orderBy("blog.publishedAt", "DESC")
       .skip((page - 1) * limit)
       .take(limit);
 
     if (query.search?.trim()) {
-      qb.andWhere("(blog.title ILIKE :search OR blog.excerpt ILIKE :search)", {
+      qb.andWhere("(blog.title ILIKE :search OR blog.slug ILIKE :search)", {
         search: `%${query.search.trim()}%`,
       });
     }
@@ -528,7 +485,7 @@ export class BlogsService {
 
   async publicDetail(slug: string): Promise<BlogDetailDto> {
     const blog = await this.blogsRepository.findOne({
-      where: { slug, status: BlogStatus.PUBLISHED, isActive: true },
+      where: { slug, status: BlogStatus.PUBLISHED },
       relations: this.loadRelations(),
     });
 

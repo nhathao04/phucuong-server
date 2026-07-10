@@ -446,7 +446,6 @@ export class InquiriesService {
         formStatus: InquiryFormStatus.READY_TO_SUBMIT,
         step4CompletedAt: new Date(),
         submittedAt: new Date(),
-        isCompleted: true,
         lastStepSavedAt: new Date(),
         status: InquiryStatus.SUBMITTED,
       });

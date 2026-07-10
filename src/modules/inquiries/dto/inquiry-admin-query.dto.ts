@@ -13,6 +13,7 @@ import {
   Min,
 } from "class-validator";
 import {
+  InquiryContactStatus,
   InquiryFormStatus,
   InquirySalesStatus,
   InquiryStatus,
@@ -107,6 +108,23 @@ export class InquiryListQueryDto {
   @Transform(emptyToUndefined)
   @IsUUID()
   customerId?: string;
+
+  @ApiPropertyOptional({
+    description: "Filter by the primary staff currently assigned to handle the inquiry (UUID)",
+  })
+  @IsOptional()
+  @Transform(emptyToUndefined)
+  @IsUUID()
+  assignedToId?: string;
+
+  @ApiPropertyOptional({
+    enum: InquiryContactStatus,
+    description: "Filter by contact workflow status",
+  })
+  @IsOptional()
+  @Transform(emptyToUndefined)
+  @IsEnum(InquiryContactStatus)
+  contactStatus?: InquiryContactStatus;
 
   @ApiPropertyOptional({ description: "Filter by UTM source" })
   @IsOptional()
