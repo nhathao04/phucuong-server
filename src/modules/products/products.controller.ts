@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -31,6 +33,7 @@ import {
   ProductDetailDto,
   ProductListResponseDto,
   ProductOrderConfigDto,
+  ProductCategorySummaryDto,
 } from "./dto/product-response.dto";
 import { ProductsService } from "./products.service";
 import { ProductListQueryDto as PublicProductListQueryDto } from "./dto/product-list-query.dto";
@@ -111,6 +114,17 @@ export class ProductsController {
     return this.productsService.updateStaffProduct(id, updateProductDto);
   }
 
+  @Patch(":id/soft-delete")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Soft delete product (status → hidden)" })
+  @ApiParam({ name: "id", description: "Product UUID" })
+  @ApiResponse({ status: 200, type: ProductDetailDto })
+  softDelete(
+    @Param("id", ParseUUIDPipe) id: string,
+  ): Promise<ProductDetailDto> {
+    return this.productsService.softDeleteProduct(id);
+  }
+
   @Get(":id/order-config")
   @ApiOperation({
     summary: "Get inquiry order config (staff)",
@@ -152,6 +166,13 @@ export class PublicProductsController {
     return this.productsService.listPublic(query);
   }
 
+  @Get("categories")
+  @ApiOperation({ summary: "List active product categories (public)" })
+  @ApiResponse({ status: 200, type: [ProductCategorySummaryDto] })
+  listCategories(): Promise<ProductCategorySummaryDto[]> {
+    return this.productsService.listActiveCategories();
+  }
+
   @Get(":identifier")
   @ApiOperation({
     summary: "Get published product detail (public)",
@@ -183,5 +204,22 @@ export class PublicProductsController {
     @Param("identifier") identifier: string,
   ): Promise<ProductOrderConfigDto> {
     return this.productsService.getPublicOrderConfig(identifier);
+  }
+}
+
+// ─────────────────────── Staff (categories) ────────────────────────
+
+@ApiTags("staff-product-categories")
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, StaffRoleGuard)
+@Controller("staff/product-categories")
+export class StaffProductCategoriesController {
+  constructor(private readonly productsService: ProductsService) {}
+
+  @Get()
+  @ApiOperation({ summary: "List all product categories (staff)" })
+  @ApiResponse({ status: 200, type: [ProductCategorySummaryDto] })
+  list(): Promise<ProductCategorySummaryDto[]> {
+    return this.productsService.listCategories();
   }
 }

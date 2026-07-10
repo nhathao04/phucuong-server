@@ -85,3 +85,9 @@ export enum EmailOutboxStatus {
   SENT = "sent",
   FAILED = "failed",
 }
+
+export enum InquiryContactStatus {
+  NOT_CONTACTED = "not_contacted",
+  ASSIGNED = "assigned",
+  CONTACTED = "contacted",
+}

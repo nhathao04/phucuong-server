@@ -9,6 +9,8 @@ import { In, QueryFailedError, Repository, EntityManager } from "typeorm";
 import {
   CreateProductDto,
   ProductAttributeValueInputDto,
+  ProductCertificateInputDto,
+  ProductFaqInputDto,
   ProductImageRefDto,
   ProductPackagingOptionInputDto,
   ProductQuoteConfigInputDto,
@@ -16,14 +18,18 @@ import {
   ProductTechnicalSpecificationInputDto,
   ProductWhyChooseUsInputDto,
   UpdateProductDto,
+  ProductApplicationInputDto,
+  ProductApplicationAttributeInputDto,
 } from "./dto/product-request.dto";
 import { ProductListQueryDto } from "./dto/product-list-query.dto";
 import {
   AssetSummaryDto,
 } from "../media/dto/asset.dto";
+import { AssetOwnerType } from "../media/entities/asset.entity";
 import {
   ProductAttributeMappingSummaryDto,
   ProductAttributeValueResponseDto,
+  ProductAttributeValueSummaryDto,
   ProductCertificateSummaryDto,
   ProductContainerConfigSummaryDto,
   ProductCountryConfigSummaryDto,
@@ -49,6 +55,7 @@ import {
   ProductTradeTermSummaryDto,
   ProductCategorySummaryDto,
   ProductWhyChooseUsDto,
+  ProductApplicationResponseDto,
 } from "./dto/product-response.dto";
 import {
   ProductAttribute,
@@ -74,8 +81,11 @@ import { ProductTechnicalSpecification } from "./entities/product-technical-spec
 import { ProductPackagingOption } from "./entities/product-packaging-option.entity";
 import { ProductTargetBuyer } from "./entities/product-target-buyer.entity";
 import { ProductWhyChooseUs } from "./entities/product-why-choose-us.entity";
+import { ProductApplication } from "./entities/product-application.entity";
+import { ProductApplicationAttribute } from "./entities/product-application-attribute.entity";
 import { Country } from "../geography/entities/country.entity";
 import { Asset } from "../media/entities/asset.entity";
+import { Certificate } from "../inquiries/entities/certificate.entity";
 
 type ProductConfigPayload = Partial<CreateProductDto & UpdateProductDto> & {
   attributeMappings?: Array<{
@@ -119,6 +129,8 @@ type ProductConfigPayload = Partial<CreateProductDto & UpdateProductDto> & {
   packagingOptions?: ProductPackagingOptionInputDto[];
   targetBuyers?: ProductTargetBuyerInputDto[];
   whyChooseUs?: ProductWhyChooseUsInputDto[];
+  faqs?: ProductFaqInputDto[];
+  certificates?: ProductCertificateInputDto[];
   badges?: string[];
   hero?: ProductQuoteConfigInputDto extends never
     ? never
@@ -129,6 +141,7 @@ type ProductConfigPayload = Partial<CreateProductDto & UpdateProductDto> & {
         stats?: Array<{ value: string; label: string }>;
       } | null;
   quoteConfig?: ProductQuoteConfigInputDto | null;
+  applications?: ProductApplicationInputDto[];
 };
 
 const toAssetSummary = (asset: Asset | null | undefined): AssetSummaryDto | null => {
@@ -154,6 +167,8 @@ export class ProductsService {
     private readonly productCategoriesRepository: Repository<ProductCategory>,
     @InjectRepository(Country)
     private readonly countriesRepository: Repository<Country>,
+    @InjectRepository(Certificate)
+    private readonly certificateRepository: Repository<Certificate>,
   ) {}
 
   private normalizeText(value?: string | null): string | null {
@@ -185,6 +200,11 @@ export class ProductsService {
       id: category.id,
       name: category.name,
       slug: category.slug,
+      description: category.description ?? null,
+      sortOrder: category.sortOrder,
+      isActive: category.isActive,
+      createdAt: category.createdAt,
+      updatedAt: category.updatedAt,
     };
   }
 
@@ -241,6 +261,18 @@ export class ProductsService {
         required: value.required,
         sortOrder: value.sortOrder,
       }));
+  }
+
+  private toAttributeValueSummary(
+    value: ProductAttributeValue,
+  ): ProductAttributeValueSummaryDto {
+    return {
+      code: value.attribute?.code ?? "",
+      name: value.attribute?.name ?? "",
+      groupKey: value.attribute?.groupKey ?? "other",
+      value: value.value ?? null,
+      footnote: value.footnote ?? value.attribute?.footnote ?? null,
+    };
   }
 
   private toContainerConfigDto(
@@ -308,6 +340,26 @@ export class ProductsService {
       status: cert.certificate?.status ?? null,
       fileUrl: cert.certificate?.fileUrl ?? null,
     };
+  }
+
+  private toApplications(
+    product: Product,
+  ): ProductApplicationResponseDto[] {
+    return [...(product.applications ?? [])]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((app) => ({
+        id: app.id,
+        introLine: app.introLine ?? null,
+        attributes: [...(app.attributes ?? [])]
+          .sort((a, b) => a.sortOrder - b.sortOrder)
+          .map((attr) => ({
+            id: attr.id,
+            name: attr.name,
+            value: attr.value ?? null,
+            sortOrder: attr.sortOrder,
+          })),
+        sortOrder: app.sortOrder,
+      }));
   }
 
   private toImageDto(image: ProductImage): AssetSummaryDto | null {
@@ -432,13 +484,15 @@ export class ProductsService {
   }
 
   private toListItemDto(product: Product): ProductListItemDto {
-    const attrSpecs = this.toAttributeSpecifications(product);
-    const grouped: Record<string, typeof attrSpecs> = {};
-    for (const item of attrSpecs) {
-      if (!grouped[item.groupKey]) {
-        grouped[item.groupKey] = [];
+    const attrValues = (product.attributeValues ?? []).slice().sort((a, b) => a.sortOrder - b.sortOrder);
+    const grouped: Record<string, ProductAttributeValueSummaryDto[]> = {};
+    for (const value of attrValues) {
+      const summary = this.toAttributeValueSummary(value);
+      const key = summary.groupKey;
+      if (!grouped[key]) {
+        grouped[key] = [];
       }
-      grouped[item.groupKey].push(item);
+      grouped[key].push(summary);
     }
 
     return {
@@ -447,14 +501,13 @@ export class ProductsService {
         .slice()
         .sort((a, b) => a.sortOrder - b.sortOrder)
         .map((config) => this.toCountryConfigDto(config)),
-      attributeSpecifications: attrSpecs,
       attributeGrouped: grouped as ProductListItemDto["attributeGrouped"],
     };
   }
 
   private toDetailDto(product: Product): ProductDetailDto {
     const attrSpecs = this.toAttributeSpecifications(product);
-    const grouped: Record<string, typeof attrSpecs> = {};
+    const grouped: Record<string, ProductAttributeValueResponseDto[]> = {};
     for (const item of attrSpecs) {
       if (!grouped[item.groupKey]) {
         grouped[item.groupKey] = [];
@@ -474,7 +527,6 @@ export class ProductsService {
         .slice()
         .sort((a, b) => a.sortOrder - b.sortOrder)
         .map((config) => this.toCountryConfigDto(config)),
-      attributeSpecifications: attrSpecs,
       attributeGrouped: grouped as ProductDetailDto["attributeGrouped"],
       attributeMappings: (product.attributeMappings ?? [])
         .slice()
@@ -495,6 +547,7 @@ export class ProductsService {
         .slice()
         .sort((a, b) => a.sortOrder - b.sortOrder)
         .map((cert) => this.toCertificateDto(cert)),
+      applications: this.toApplications(product),
     };
   }
 
@@ -522,6 +575,7 @@ export class ProductsService {
         packagingOptions: true,
         targetBuyers: true,
         whyChooseUs: true,
+        applications: { attributes: true },
       },
     });
 
@@ -654,6 +708,14 @@ export class ProductsService {
         input.shortDescription !== undefined
           ? input.shortDescription
           : (existingProduct?.shortDescription ?? null),
+      thumbnailUrl:
+        input.thumbnailUrl !== undefined
+          ? input.thumbnailUrl
+          : (existingProduct?.thumbnailUrl ?? null),
+      imageUrl:
+        input.imageUrl !== undefined
+          ? input.imageUrl
+          : (existingProduct?.imageUrl ?? null),
       isActive:
         input.isActive !== undefined
           ? input.isActive
@@ -1139,23 +1201,60 @@ export class ProductsService {
     if (!configInput.images) return;
 
     const imageRepository = manager.getRepository(ProductImage);
+    const assetRepository = manager.getRepository(Asset);
     await imageRepository.delete({ productId });
 
     if (configInput.images.length === 0) return;
 
     const seen = new Set<string>();
     const entries: ProductImage[] = [];
-    configInput.images.forEach((ref, index) => {
-      if (!ref.assetId || seen.has(ref.assetId)) return;
-      seen.add(ref.assetId);
+
+    for (const ref of configInput.images) {
+      let assetId = ref.assetId;
+
+      // If URL is provided instead of assetId, create or find existing Asset
+      if (!assetId && ref.url) {
+        // Check if asset with this URL already exists
+        let asset = await assetRepository.findOne({
+          where: { url: ref.url },
+          select: { id: true },
+        });
+
+        if (!asset) {
+          // Create new asset record
+          asset = assetRepository.create({
+            url: ref.url,
+            thumbnailUrl: ref.url, // Cloudinary can generate thumbnails from URL
+            alt: ref.alt ?? null,
+            caption: ref.caption ?? null,
+            mimeType: "image",
+            ownerType: AssetOwnerType.PRODUCT,
+            ownerId: productId,
+          });
+          asset = await assetRepository.save(asset);
+        } else if (
+          (ref.caption !== undefined && ref.caption !== asset.caption) ||
+          (ref.alt !== undefined && ref.alt !== asset.alt)
+        ) {
+          // Update alt/caption if caller supplied a new value
+          asset.alt = ref.alt ?? asset.alt;
+          asset.caption = ref.caption ?? asset.caption;
+          asset = await assetRepository.save(asset);
+        }
+        assetId = asset.id;
+      }
+
+      if (!assetId || seen.has(assetId)) continue;
+      seen.add(assetId);
+
       entries.push(
         imageRepository.create({
           productId,
-          assetId: ref.assetId,
-          sortOrder: ref.sortOrder ?? index,
+          assetId,
+          sortOrder: ref.sortOrder ?? entries.length,
         }),
       );
-    });
+    }
 
     if (entries.length > 0) {
       await imageRepository.save(entries);
@@ -1343,6 +1442,159 @@ export class ProductsService {
     await productTradeTermRepository.save(entries);
   }
 
+  private async syncFaqs(
+    manager: EntityManager,
+    productId: string,
+    input: CreateProductDto | UpdateProductDto,
+  ): Promise<void> {
+    const configInput = input as ProductConfigPayload;
+    if (!configInput.faqs) return;
+
+    const faqRepository = manager.getRepository(ProductFaq);
+    await faqRepository.delete({ productId });
+
+    if (configInput.faqs.length === 0) return;
+
+    const seenQuestions = new Set<string>();
+    const entries = configInput.faqs.map((faq, index) => {
+      const question = faq.question.trim();
+      const key = question.toLowerCase();
+      if (seenQuestions.has(key)) {
+        throw new BadRequestException(
+          `Duplicate FAQ question provided in payload: ${question}`,
+        );
+      }
+      seenQuestions.add(key);
+
+      return faqRepository.create({
+        productId,
+        question,
+        answer: faq.answer,
+        sortOrder: faq.sortOrder ?? index,
+        isActive: faq.isActive ?? true,
+      });
+    });
+
+    await faqRepository.save(entries);
+  }
+
+  private async syncCertificates(
+    manager: EntityManager,
+    productId: string,
+    input: CreateProductDto | UpdateProductDto,
+  ): Promise<void> {
+    const configInput = input as ProductConfigPayload;
+    if (!configInput.certificates) return;
+
+    const productCertificateRepository = manager.getRepository(ProductCertificate);
+    const certificateRepository = manager.getRepository(Certificate);
+    await productCertificateRepository.delete({ productId });
+
+    if (configInput.certificates.length === 0) return;
+
+    const seen = new Set<string>();
+    const entries: ProductCertificate[] = [];
+
+    for (let index = 0; index < configInput.certificates.length; index += 1) {
+      const item = configInput.certificates[index];
+      let resolvedCertificateId: string | null = null;
+
+      if (item.certificateId) {
+        const cert = await certificateRepository.findOne({
+          where: { id: item.certificateId },
+        });
+        if (!cert) {
+          throw new BadRequestException(
+            `Certificate not found for id: ${item.certificateId}`,
+          );
+        }
+        resolvedCertificateId = cert.id;
+      } else {
+        const trimmedName = item.name?.trim();
+        if (!trimmedName) {
+          throw new BadRequestException(
+            `Certificate entry #${index + 1} requires either certificateId or name.`,
+          );
+        }
+        let cert = await certificateRepository.findOne({
+          where: { name: trimmedName },
+        });
+        if (!cert) {
+          cert = await certificateRepository.save(
+            certificateRepository.create({
+              name: trimmedName,
+              status: item.status ?? null,
+              fileUrl: item.fileUrl ?? null,
+            }),
+          );
+        }
+        resolvedCertificateId = cert.id;
+      }
+
+      if (seen.has(resolvedCertificateId)) {
+        throw new BadRequestException(
+          `Duplicate certificate provided in payload: ${resolvedCertificateId}`,
+        );
+      }
+      seen.add(resolvedCertificateId);
+
+      entries.push(
+        productCertificateRepository.create({
+          productId,
+          certificateId: resolvedCertificateId,
+          isRequired: item.isRequired ?? false,
+          sortOrder: item.sortOrder ?? index,
+        }),
+      );
+    }
+
+    await productCertificateRepository.save(entries);
+  }
+
+  private async syncApplications(
+    manager: EntityManager,
+    productId: string,
+    input: CreateProductDto | UpdateProductDto,
+  ): Promise<void> {
+    const configInput = input as ProductConfigPayload;
+    if (!configInput.applications) return;
+
+    const appRepository = manager.getRepository(ProductApplication);
+    const attrRepository = manager.getRepository(ProductApplicationAttribute);
+
+    const existingApps = await appRepository.find({ where: { productId } });
+    const appIds = existingApps.map((a) => a.id);
+    if (appIds.length > 0) {
+      await attrRepository.delete({ productApplicationId: In(appIds) });
+    }
+    await appRepository.delete({ productId });
+
+    if (configInput.applications.length === 0) return;
+
+    for (let i = 0; i < configInput.applications.length; i += 1) {
+      const appInput = configInput.applications[i];
+      const app = appRepository.create({
+        productId,
+        introLine: appInput.introLine ?? null,
+        sortOrder: appInput.sortOrder ?? i,
+      });
+      const savedApp = await appRepository.save(app);
+
+      if (appInput.attributes && appInput.attributes.length > 0) {
+        const attrEntries = appInput.attributes.map(
+          (attr: ProductApplicationAttributeInputDto, idx: number) =>
+            attrRepository.create({
+              productApplicationId: savedApp.id,
+              name: attr.name,
+              value: attr.value ?? null,
+              sortOrder: attr.sortOrder ?? idx,
+            }),
+        );
+        await attrRepository.save(attrEntries);
+      }
+    }
+  }
+
   private async syncAttributeValues(
     manager: EntityManager,
     productId: string,
@@ -1509,6 +1761,13 @@ export class ProductsService {
     await this.syncTargetBuyers(manager, productId, input);
     await this.syncWhyChooseUs(manager, productId, input);
     await this.syncTradeTerms(manager, productId, input);
+    await this.syncFaqs(manager, productId, input);
+    await this.syncCertificates(manager, productId, input);
+    await this.syncApplications(manager, productId, input);
+  }
+
+  async softDeleteProduct(id: string): Promise<ProductDetailDto> {
+    return this.updateStaffProduct(id, { status: ProductStatus.HIDDEN } as any);
   }
 
   private isUniqueConstraintError(error: unknown): boolean {
@@ -1887,5 +2146,42 @@ export class ProductsService {
       countryConfigs: countries,
       tradeTerms,
     };
+  }
+
+  // ──────────────────────── Category endpoints ────────────────────────
+
+  async listCategories(): Promise<ProductCategorySummaryDto[]> {
+    const categories = await this.productCategoriesRepository.find({
+      order: { sortOrder: "ASC", createdAt: "ASC" },
+    });
+
+    return categories.map((cat) => ({
+      id: cat.id,
+      name: cat.name,
+      slug: cat.slug,
+      description: cat.description ?? null,
+      sortOrder: cat.sortOrder,
+      isActive: cat.isActive,
+      createdAt: cat.createdAt,
+      updatedAt: cat.updatedAt,
+    }));
+  }
+
+  async listActiveCategories(): Promise<ProductCategorySummaryDto[]> {
+    const categories = await this.productCategoriesRepository.find({
+      where: { isActive: true },
+      order: { sortOrder: "ASC", createdAt: "ASC" },
+    });
+
+    return categories.map((cat) => ({
+      id: cat.id,
+      name: cat.name,
+      slug: cat.slug,
+      description: cat.description ?? null,
+      sortOrder: cat.sortOrder,
+      isActive: cat.isActive,
+      createdAt: cat.createdAt,
+      updatedAt: cat.updatedAt,
+    }));
   }
 }

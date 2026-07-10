@@ -21,6 +21,9 @@ export class BlogCategory {
   @Column({ type: "varchar", length: 140 })
   slug!: string;
 
+  @Column({ type: "text", nullable: true })
+  description!: string | null;
+
   @Column({ type: "integer", default: 0 })
   sortOrder!: number;
 

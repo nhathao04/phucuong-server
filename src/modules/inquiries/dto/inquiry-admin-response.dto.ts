@@ -6,6 +6,8 @@ export class InquiryListItemDto {
   @ApiPropertyOptional() customerName!: string | null;
   @ApiPropertyOptional() companyName!: string | null;
   @ApiPropertyOptional() email!: string | null;
+  @ApiPropertyOptional() phone!: string | null;
+  @ApiPropertyOptional() whatsapp!: string | null;
   @ApiPropertyOptional() productId!: string | null;
   @ApiPropertyOptional() productName!: string | null;
   @ApiPropertyOptional() destinationCountryId!: string | null;
@@ -17,7 +19,11 @@ export class InquiryListItemDto {
   @ApiProperty() formStatus!: string;
   @ApiPropertyOptional() salesStatus!: string | null;
   @ApiProperty() currentStep!: number;
-  @ApiProperty() isCompleted!: boolean;
+  @ApiProperty() contactStatus!: string;
+  @ApiPropertyOptional() contactedAt!: Date | null;
+  @ApiPropertyOptional() assignedToId!: string | null;
+  @ApiPropertyOptional() assignedToName!: string | null;
+  @ApiPropertyOptional() assignedToEmail!: string | null;
   @ApiProperty() internalEmailSent!: boolean;
   @ApiProperty() customerEmailSent!: boolean;
   @ApiPropertyOptional() leadCapturedAt!: Date | null;
@@ -36,8 +42,8 @@ export class InquiryListResponseDto {
 }
 
 export class InquiryDetailDto extends InquiryListItemDto {
-  @ApiPropertyOptional() phone!: string | null;
-  @ApiPropertyOptional() whatsapp!: string | null;
+  @ApiPropertyOptional() declare phone: string | null;
+  @ApiPropertyOptional() declare whatsapp: string | null;
   @ApiPropertyOptional() ipAddress!: string | null;
   @ApiPropertyOptional() userAgent!: string | null;
   @ApiPropertyOptional() referrerUrl!: string | null;

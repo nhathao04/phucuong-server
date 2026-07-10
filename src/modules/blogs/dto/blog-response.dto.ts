@@ -87,11 +87,6 @@ export class BlogSummaryDto {
   slug!: string;
 
   @ApiPropertyOptional({
-    example: "Practical notes to prepare better inquiries.",
-  })
-  excerpt!: string | null;
-
-  @ApiPropertyOptional({
     example: "https://cdn.example.com/blog/export-guide-thumb.webp",
     description: "Legacy string thumbnail URL for backward compatibility.",
   })
@@ -106,20 +101,11 @@ export class BlogSummaryDto {
   @ApiPropertyOptional({ type: [BlogTagDto] })
   tags!: BlogTagDto[];
 
-  @ApiPropertyOptional({ example: 5 })
-  readTimeMinutes!: number | null;
-
   @ApiProperty({ enum: BlogStatus, example: BlogStatus.PUBLISHED })
   status!: BlogStatus;
 
   @ApiProperty({ example: false })
   isFeatured!: boolean;
-
-  @ApiProperty({ example: 0 })
-  sortOrder!: number;
-
-  @ApiProperty({ example: true })
-  isActive!: boolean;
 
   @ApiPropertyOptional({ example: "2026-07-03T10:00:00.000Z" })
   publishedAt!: Date | null;
@@ -146,12 +132,6 @@ export class BlogSummaryDto {
 }
 
 export class BlogDetailDto extends BlogSummaryDto {
-  @ApiPropertyOptional({
-    example: "https://cdn.example.com/blog/export-guide-cover.webp",
-    description: "Legacy cover image URL string.",
-  })
-  coverImageUrl!: string | null;
-
   @ApiPropertyOptional({ type: AssetSummaryDto })
   coverImage!: AssetSummaryDto | null;
 

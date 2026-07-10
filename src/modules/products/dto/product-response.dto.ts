@@ -7,6 +7,25 @@ import {
   ProductAttributeType,
 } from "../entities/product-attribute.entity";
 
+export class ProductAttributeValueSummaryDto {
+  @ApiProperty({ example: "origin" })
+  code!: string;
+
+  @ApiProperty({ example: "Origin" })
+  name!: string;
+
+  @ApiProperty({ enum: ProductAttributeGroup })
+  groupKey!: ProductAttributeGroup;
+
+  @ApiPropertyOptional({ example: "Ben Tre, Vietnam" })
+  value!: string | null;
+
+  @ApiPropertyOptional({
+    example: "*Shelf life depends on proper storage...",
+  })
+  footnote!: string | null;
+}
+
 export class ProductAttributeValueResponseDto {
   @ApiProperty({ example: 1 })
   id!: number;
@@ -87,6 +106,21 @@ export class ProductCategorySummaryDto {
 
   @ApiProperty({ example: "coconut-products" })
   slug!: string;
+
+  @ApiPropertyOptional({ example: "Coconut-based products for export." })
+  description!: string | null;
+
+  @ApiProperty({ example: 0 })
+  sortOrder!: number;
+
+  @ApiProperty({ example: true })
+  isActive!: boolean;
+
+  @ApiProperty({ example: "2026-06-28T10:00:00.000Z" })
+  createdAt!: Date;
+
+  @ApiProperty({ example: "2026-06-28T10:00:00.000Z" })
+  updatedAt!: Date;
 }
 
 export class ProductCountrySummaryDto {
@@ -425,32 +459,58 @@ export class ProductSummaryDto {
   updatedAt!: Date;
 }
 
+// ──────────────────────── Application ────────────────────────
+
+export class ProductApplicationAttributeResponseDto {
+  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
+  id!: string;
+
+  @ApiProperty({ example: "Beverage production" })
+  name!: string;
+
+  @ApiPropertyOptional({
+    example: "Coconut water drinks, blends, and smoothies",
+  })
+  value!: string | null;
+
+  @ApiProperty({ example: 0 })
+  sortOrder!: number;
+}
+
+export class ProductApplicationResponseDto {
+  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440001" })
+  id!: string;
+
+  @ApiPropertyOptional({
+    example: "A clean and versatile base for beverage and food production.",
+  })
+  introLine!: string | null;
+
+  @ApiProperty({ type: [ProductApplicationAttributeResponseDto] })
+  attributes!: ProductApplicationAttributeResponseDto[];
+
+  @ApiProperty({ example: 0 })
+  sortOrder!: number;
+}
+
 export class ProductListItemDto extends ProductSummaryDto {
   @ApiProperty({ type: [ProductCountryConfigSummaryDto] })
   countryConfigs!: ProductCountryConfigSummaryDto[];
 
-  @ApiProperty({ type: [ProductAttributeValueResponseDto] })
-  @Type(() => ProductAttributeValueResponseDto)
-  attributeSpecifications!: ProductAttributeValueResponseDto[];
-
   @ApiProperty({
     type: "object",
     description:
-      "Attribute values grouped by groupKey (specifications / packing / ...).",
+      "Attribute values grouped by groupKey (specifications / packing / ...). Only essential fields: code, name, groupKey, value, footnote.",
     additionalProperties: true,
   })
   attributeGrouped!: {
-    [key in ProductAttributeGroup]?: ProductAttributeValueResponseDto[];
+    [key in ProductAttributeGroup]?: ProductAttributeValueSummaryDto[];
   };
 }
 
 export class ProductDetailDto extends ProductSummaryDto {
   @ApiProperty({ type: [ProductCountryConfigSummaryDto] })
   countryConfigs!: ProductCountryConfigSummaryDto[];
-
-  @ApiProperty({ type: [ProductAttributeValueResponseDto] })
-  @Type(() => ProductAttributeValueResponseDto)
-  attributeSpecifications!: ProductAttributeValueResponseDto[];
 
   @ApiProperty({
     type: "object",
@@ -500,6 +560,10 @@ export class ProductDetailDto extends ProductSummaryDto {
   @ApiProperty({ type: ProductQuoteConfigDto })
   @Type(() => ProductQuoteConfigDto)
   quoteConfig!: ProductQuoteConfigDto | null;
+
+  @ApiProperty({ type: [ProductApplicationResponseDto] })
+  @Type(() => ProductApplicationResponseDto)
+  applications!: ProductApplicationResponseDto[];
 }
 
 export class ProductListResponseDto {

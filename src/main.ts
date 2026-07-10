@@ -13,6 +13,27 @@ async function bootstrap(): Promise<void> {
   const configService = app.get(ConfigService);
 
   app.setGlobalPrefix("api");
+  app.set("trust proxy", 1);
+  app.enableCors({
+    origin: true,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+    allowedHeaders: [
+      "Origin",
+      "X-Requested-With",
+      "Content-Type",
+      "Accept",
+      "Authorization",
+      "Access-Control-Allow-Origin",
+      "Access-Control-Allow-Headers",
+      "Access-Control-Request-Method",
+      "Access-Control-Request-Headers",
+    ],
+    exposedHeaders: ["Access-Control-Allow-Origin", "Authorization"],
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
+    maxAge: 86400,
+  });
   app.useStaticAssets(join(__dirname, "..", "..", "public"));
   app.useGlobalPipes(
     new ValidationPipe({

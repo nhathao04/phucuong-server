@@ -23,6 +23,7 @@ import { ProductTargetBuyer } from "./product-target-buyer.entity";
 import { ProductTechnicalSpecification } from "./product-technical-specification.entity";
 import { ProductTradeTerm } from "./product-trade-term.entity";
 import { ProductWhyChooseUs } from "./product-why-choose-us.entity";
+import { ProductApplication } from "./product-application.entity";
 
 export enum ProductStatus {
   DRAFT = "draft",
@@ -172,6 +173,9 @@ export class Product {
 
   @OneToMany(() => ProductWhyChooseUs, (reason) => reason.product)
   whyChooseUs!: ProductWhyChooseUs[];
+
+  @OneToMany(() => ProductApplication, (app) => app.product)
+  applications!: ProductApplication[];
 
   @CreateDateColumn()
   createdAt!: Date;

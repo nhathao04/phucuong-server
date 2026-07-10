@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { Transform } from "class-transformer";
 import { IsOptional, IsString, MaxLength } from "class-validator";
 
 export class CreateCertificateDto {
@@ -59,6 +60,9 @@ export class CertificateListQueryDto {
     description: "Case-insensitive substring match on `name`.",
   })
   @IsOptional()
+  @Transform(({ value }) =>
+    value === undefined || value === null || value === "" ? undefined : value,
+  )
   @IsString()
   @MaxLength(150)
   search?: string;
