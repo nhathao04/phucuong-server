@@ -18,6 +18,15 @@ import {
 } from "class-validator";
 import { ProductStatus } from "../entities/product.entity";
 import { ProductAttributeGroup, ProductAttributeType } from "../entities/product-attribute.entity";
+import {
+  ProductApplicationInputDto,
+  ProductApplicationAttributeInputDto,
+} from "./product-application.dto";
+
+export {
+  ProductApplicationInputDto,
+  ProductApplicationAttributeInputDto,
+};
 
 export class ProductAttributeValueInputDto {
   @ApiPropertyOptional({
@@ -957,6 +966,16 @@ export class CreateProductDto {
   @ValidateNested({ each: true })
   @Type(() => ProductCertificateInputDto)
   certificates?: ProductCertificateInputDto[];
+
+  @ApiPropertyOptional({
+    type: [ProductApplicationInputDto],
+    description: "Applications for this product.",
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProductApplicationInputDto)
+  applications?: ProductApplicationInputDto[];
 }
 
 export class UpdateProductDto {
@@ -1210,6 +1229,16 @@ export class UpdateProductDto {
   @ValidateNested({ each: true })
   @Type(() => ProductCertificateInputDto)
   certificates?: ProductCertificateInputDto[];
+
+  @ApiPropertyOptional({
+    type: [ProductApplicationInputDto],
+    description: "Applications for this product.",
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProductApplicationInputDto)
+  applications?: ProductApplicationInputDto[];
 }
 
 export const CREATE_PRODUCT_SWAGGER_EXAMPLE: CreateProductDto = {

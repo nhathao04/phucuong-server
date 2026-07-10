@@ -18,6 +18,8 @@ import {
   ProductTechnicalSpecificationInputDto,
   ProductWhyChooseUsInputDto,
   UpdateProductDto,
+  ProductApplicationInputDto,
+  ProductApplicationAttributeInputDto,
 } from "./dto/product-request.dto";
 import { ProductListQueryDto } from "./dto/product-list-query.dto";
 import {
@@ -53,6 +55,7 @@ import {
   ProductTradeTermSummaryDto,
   ProductCategorySummaryDto,
   ProductWhyChooseUsDto,
+  ProductApplicationResponseDto,
 } from "./dto/product-response.dto";
 import {
   ProductAttribute,
@@ -78,6 +81,8 @@ import { ProductTechnicalSpecification } from "./entities/product-technical-spec
 import { ProductPackagingOption } from "./entities/product-packaging-option.entity";
 import { ProductTargetBuyer } from "./entities/product-target-buyer.entity";
 import { ProductWhyChooseUs } from "./entities/product-why-choose-us.entity";
+import { ProductApplication } from "./entities/product-application.entity";
+import { ProductApplicationAttribute } from "./entities/product-application-attribute.entity";
 import { Country } from "../geography/entities/country.entity";
 import { Asset } from "../media/entities/asset.entity";
 import { Certificate } from "../inquiries/entities/certificate.entity";
@@ -136,6 +141,7 @@ type ProductConfigPayload = Partial<CreateProductDto & UpdateProductDto> & {
         stats?: Array<{ value: string; label: string }>;
       } | null;
   quoteConfig?: ProductQuoteConfigInputDto | null;
+  applications?: ProductApplicationInputDto[];
 };
 
 const toAssetSummary = (asset: Asset | null | undefined): AssetSummaryDto | null => {
@@ -336,6 +342,26 @@ export class ProductsService {
     };
   }
 
+  private toApplications(
+    product: Product,
+  ): ProductApplicationResponseDto[] {
+    return [...(product.applications ?? [])]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((app) => ({
+        id: app.id,
+        introLine: app.introLine ?? null,
+        attributes: [...(app.attributes ?? [])]
+          .sort((a, b) => a.sortOrder - b.sortOrder)
+          .map((attr) => ({
+            id: attr.id,
+            name: attr.name,
+            value: attr.value ?? null,
+            sortOrder: attr.sortOrder,
+          })),
+        sortOrder: app.sortOrder,
+      }));
+  }
+
   private toImageDto(image: ProductImage): AssetSummaryDto | null {
     return toAssetSummary(image.asset);
   }
@@ -521,6 +547,7 @@ export class ProductsService {
         .slice()
         .sort((a, b) => a.sortOrder - b.sortOrder)
         .map((cert) => this.toCertificateDto(cert)),
+      applications: this.toApplications(product),
     };
   }
 
@@ -548,6 +575,7 @@ export class ProductsService {
         packagingOptions: true,
         targetBuyers: true,
         whyChooseUs: true,
+        applications: { attributes: true },
       },
     });
 
@@ -1523,6 +1551,50 @@ export class ProductsService {
     await productCertificateRepository.save(entries);
   }
 
+  private async syncApplications(
+    manager: EntityManager,
+    productId: string,
+    input: CreateProductDto | UpdateProductDto,
+  ): Promise<void> {
+    const configInput = input as ProductConfigPayload;
+    if (!configInput.applications) return;
+
+    const appRepository = manager.getRepository(ProductApplication);
+    const attrRepository = manager.getRepository(ProductApplicationAttribute);
+
+    const existingApps = await appRepository.find({ where: { productId } });
+    const appIds = existingApps.map((a) => a.id);
+    if (appIds.length > 0) {
+      await attrRepository.delete({ productApplicationId: appIds as any });
+    }
+    await appRepository.delete({ productId });
+
+    if (configInput.applications.length === 0) return;
+
+    for (let i = 0; i < configInput.applications.length; i += 1) {
+      const appInput = configInput.applications[i];
+      const app = appRepository.create({
+        productId,
+        introLine: appInput.introLine ?? null,
+        sortOrder: appInput.sortOrder ?? i,
+      });
+      const savedApp = await appRepository.save(app);
+
+      if (appInput.attributes && appInput.attributes.length > 0) {
+        const attrEntries = appInput.attributes.map(
+          (attr: ProductApplicationAttributeInputDto, idx: number) =>
+            attrRepository.create({
+              productApplicationId: savedApp.id,
+              name: attr.name,
+              value: attr.value ?? null,
+              sortOrder: attr.sortOrder ?? idx,
+            }),
+        );
+        await attrRepository.save(attrEntries);
+      }
+    }
+  }
+
   private async syncAttributeValues(
     manager: EntityManager,
     productId: string,
@@ -1691,6 +1763,7 @@ export class ProductsService {
     await this.syncTradeTerms(manager, productId, input);
     await this.syncFaqs(manager, productId, input);
     await this.syncCertificates(manager, productId, input);
+    await this.syncApplications(manager, productId, input);
   }
 
   private isUniqueConstraintError(error: unknown): boolean {

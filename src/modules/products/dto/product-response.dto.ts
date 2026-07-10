@@ -459,6 +459,40 @@ export class ProductSummaryDto {
   updatedAt!: Date;
 }
 
+// ──────────────────────── Application ────────────────────────
+
+export class ProductApplicationAttributeResponseDto {
+  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
+  id!: string;
+
+  @ApiProperty({ example: "Beverage production" })
+  name!: string;
+
+  @ApiPropertyOptional({
+    example: "Coconut water drinks, blends, and smoothies",
+  })
+  value!: string | null;
+
+  @ApiProperty({ example: 0 })
+  sortOrder!: number;
+}
+
+export class ProductApplicationResponseDto {
+  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440001" })
+  id!: string;
+
+  @ApiPropertyOptional({
+    example: "A clean and versatile base for beverage and food production.",
+  })
+  introLine!: string | null;
+
+  @ApiProperty({ type: [ProductApplicationAttributeResponseDto] })
+  attributes!: ProductApplicationAttributeResponseDto[];
+
+  @ApiProperty({ example: 0 })
+  sortOrder!: number;
+}
+
 export class ProductListItemDto extends ProductSummaryDto {
   @ApiProperty({ type: [ProductCountryConfigSummaryDto] })
   countryConfigs!: ProductCountryConfigSummaryDto[];
@@ -526,6 +560,10 @@ export class ProductDetailDto extends ProductSummaryDto {
   @ApiProperty({ type: ProductQuoteConfigDto })
   @Type(() => ProductQuoteConfigDto)
   quoteConfig!: ProductQuoteConfigDto | null;
+
+  @ApiProperty({ type: [ProductApplicationResponseDto] })
+  @Type(() => ProductApplicationResponseDto)
+  applications!: ProductApplicationResponseDto[];
 }
 
 export class ProductListResponseDto {

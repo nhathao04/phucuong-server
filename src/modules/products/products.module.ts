@@ -18,6 +18,8 @@ import { ProductTargetBuyer } from "./entities/product-target-buyer.entity";
 import { ProductTechnicalSpecification } from "./entities/product-technical-specification.entity";
 import { ProductTradeTerm } from "./entities/product-trade-term.entity";
 import { ProductWhyChooseUs } from "./entities/product-why-choose-us.entity";
+import { ProductApplication } from "./entities/product-application.entity";
+import { ProductApplicationAttribute } from "./entities/product-application-attribute.entity";
 import { TradeTerm } from "./entities/trade-term.entity";
 import { Country } from "../geography/entities/country.entity";
 import { Certificate } from "../inquiries/entities/certificate.entity";
@@ -47,6 +49,8 @@ import { ProductAttributesModule } from "./product-attributes.module";
       ProductPackagingOption,
       ProductTargetBuyer,
       ProductWhyChooseUs,
+      ProductApplication,
+      ProductApplicationAttribute,
       TradeTerm,
       ProductTradeTerm,
       Country,
