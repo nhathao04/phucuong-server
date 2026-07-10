@@ -106,6 +106,21 @@ export class ProductCategorySummaryDto {
 
   @ApiProperty({ example: "coconut-products" })
   slug!: string;
+
+  @ApiPropertyOptional({ example: "Coconut-based products for export." })
+  description!: string | null;
+
+  @ApiProperty({ example: 0 })
+  sortOrder!: number;
+
+  @ApiProperty({ example: true })
+  isActive!: boolean;
+
+  @ApiProperty({ example: "2026-06-28T10:00:00.000Z" })
+  createdAt!: Date;
+
+  @ApiProperty({ example: "2026-06-28T10:00:00.000Z" })
+  updatedAt!: Date;
 }
 
 export class ProductCountrySummaryDto {

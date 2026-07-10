@@ -25,6 +25,7 @@ import { BlogsService } from "./blogs.service";
 import { CreateBlogDto, UpdateBlogDto } from "./dto/blog.dto";
 import { BlogListQueryDto } from "./dto/blog-list-query.dto";
 import { BlogDetailDto, BlogListResponseDto } from "./dto/blog-response.dto";
+import { BlogCategoryResponseDto } from "./dto/blog-category-response.dto";
 
 // ──────────────────────── Staff ────────────────────────
 
@@ -107,11 +108,35 @@ export class PublicBlogsController {
     return this.blogsService.publicList(query);
   }
 
+  @Get("categories")
+  @ApiOperation({ summary: "List active blog categories (public)" })
+  @ApiResponse({ status: 200, type: [BlogCategoryResponseDto] })
+  listCategories(): Promise<BlogCategoryResponseDto[]> {
+    return this.blogsService.listActiveCategories();
+  }
+
   @Get(":slug")
   @ApiOperation({ summary: "Get blog detail by slug (public)" })
   @ApiParam({ name: "slug", example: "top-5-benefits-of-organic-cashew-nuts" })
   @ApiResponse({ status: 200, type: BlogDetailDto })
   detail(@Param("slug") slug: string): Promise<BlogDetailDto> {
     return this.blogsService.publicDetail(slug);
+  }
+}
+
+// ──────────────────────── Staff (categories) ────────────────────────
+
+@ApiTags("staff-blog-categories")
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, StaffRoleGuard)
+@Controller("staff/blog-categories")
+export class StaffBlogCategoriesController {
+  constructor(private readonly blogsService: BlogsService) {}
+
+  @Get()
+  @ApiOperation({ summary: "List all blog categories (staff)" })
+  @ApiResponse({ status: 200, type: [BlogCategoryResponseDto] })
+  list(): Promise<BlogCategoryResponseDto[]> {
+    return this.blogsService.listCategories();
   }
 }

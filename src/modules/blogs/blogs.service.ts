@@ -8,6 +8,7 @@ import { EntityManager, QueryFailedError, Repository } from "typeorm";
 import { Asset, AssetOwnerType } from "../media/entities/asset.entity";
 import { AssetSummaryDto } from "../media/dto/asset.dto";
 import { BlogAsset } from "./entities/blog-asset.entity";
+import { BlogCategory } from "./entities/blog-category.entity";
 import { Blog, BlogStatus } from "./entities/blog.entity";
 import {
   BlogAuthorDto,
@@ -17,6 +18,7 @@ import {
   BlogSummaryDto,
   BlogTableOfContentsItemDto,
 } from "./dto/blog-response.dto";
+import { BlogCategoryResponseDto } from "./dto/blog-category-response.dto";
 import {
   BlogAssetRefDto,
   CreateBlogDto,
@@ -44,6 +46,8 @@ export class BlogsService {
   constructor(
     @InjectRepository(Blog)
     private readonly blogsRepository: Repository<Blog>,
+    @InjectRepository(BlogCategory)
+    private readonly categoriesRepository: Repository<BlogCategory>,
   ) {}
 
   private slugify(value: string): string {
@@ -491,5 +495,42 @@ export class BlogsService {
 
     if (!blog) throw new NotFoundException("Blog not found");
     return this.toDetailDto(blog);
+  }
+
+  // ──────────────────────── Category endpoints ────────────────────────
+
+  async listCategories(): Promise<BlogCategoryResponseDto[]> {
+    const categories = await this.categoriesRepository.find({
+      order: { sortOrder: "ASC", createdAt: "ASC" },
+    });
+
+    return categories.map((cat) => ({
+      id: cat.id,
+      name: cat.name,
+      slug: cat.slug,
+      description: cat.description,
+      sortOrder: cat.sortOrder,
+      isActive: cat.isActive,
+      createdAt: cat.createdAt,
+      updatedAt: cat.updatedAt,
+    }));
+  }
+
+  async listActiveCategories(): Promise<BlogCategoryResponseDto[]> {
+    const categories = await this.categoriesRepository.find({
+      where: { isActive: true },
+      order: { sortOrder: "ASC", createdAt: "ASC" },
+    });
+
+    return categories.map((cat) => ({
+      id: cat.id,
+      name: cat.name,
+      slug: cat.slug,
+      description: cat.description,
+      sortOrder: cat.sortOrder,
+      isActive: cat.isActive,
+      createdAt: cat.createdAt,
+      updatedAt: cat.updatedAt,
+    }));
   }
 }

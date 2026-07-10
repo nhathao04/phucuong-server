@@ -10,6 +10,7 @@ import { BlogsService } from "./blogs.service";
 import {
   StaffBlogsController,
   PublicBlogsController,
+  StaffBlogCategoriesController,
 } from "./blogs.controller";
 
 @Module({
@@ -18,7 +19,7 @@ import {
     UsersModule,
     MediaModule,
   ],
-  controllers: [StaffBlogsController, PublicBlogsController],
+  controllers: [StaffBlogsController, PublicBlogsController, StaffBlogCategoriesController],
   providers: [BlogsService],
 })
 export class BlogsModule {}

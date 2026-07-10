@@ -194,6 +194,11 @@ export class ProductsService {
       id: category.id,
       name: category.name,
       slug: category.slug,
+      description: category.description ?? null,
+      sortOrder: category.sortOrder,
+      isActive: category.isActive,
+      createdAt: category.createdAt,
+      updatedAt: category.updatedAt,
     };
   }
 
@@ -2064,5 +2069,42 @@ export class ProductsService {
       countryConfigs: countries,
       tradeTerms,
     };
+  }
+
+  // ──────────────────────── Category endpoints ────────────────────────
+
+  async listCategories(): Promise<ProductCategorySummaryDto[]> {
+    const categories = await this.productCategoriesRepository.find({
+      order: { sortOrder: "ASC", createdAt: "ASC" },
+    });
+
+    return categories.map((cat) => ({
+      id: cat.id,
+      name: cat.name,
+      slug: cat.slug,
+      description: cat.description ?? null,
+      sortOrder: cat.sortOrder,
+      isActive: cat.isActive,
+      createdAt: cat.createdAt,
+      updatedAt: cat.updatedAt,
+    }));
+  }
+
+  async listActiveCategories(): Promise<ProductCategorySummaryDto[]> {
+    const categories = await this.productCategoriesRepository.find({
+      where: { isActive: true },
+      order: { sortOrder: "ASC", createdAt: "ASC" },
+    });
+
+    return categories.map((cat) => ({
+      id: cat.id,
+      name: cat.name,
+      slug: cat.slug,
+      description: cat.description ?? null,
+      sortOrder: cat.sortOrder,
+      isActive: cat.isActive,
+      createdAt: cat.createdAt,
+      updatedAt: cat.updatedAt,
+    }));
   }
 }

@@ -24,6 +24,7 @@ import { Certificate } from "../inquiries/entities/certificate.entity";
 import {
   ProductsController,
   PublicProductsController,
+  StaffProductCategoriesController,
 } from "./products.controller";
 import { ProductsService } from "./products.service";
 import { ProductAttributesModule } from "./product-attributes.module";
@@ -55,7 +56,7 @@ import { ProductAttributesModule } from "./product-attributes.module";
     MediaModule,
     ProductAttributesModule,
   ],
-  controllers: [ProductsController, PublicProductsController],
+  controllers: [ProductsController, PublicProductsController, StaffProductCategoriesController],
   providers: [ProductsService],
 })
 export class ProductsModule {}
