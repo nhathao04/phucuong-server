@@ -1565,7 +1565,7 @@ export class ProductsService {
     const existingApps = await appRepository.find({ where: { productId } });
     const appIds = existingApps.map((a) => a.id);
     if (appIds.length > 0) {
-      await attrRepository.delete({ productApplicationId: appIds as any });
+      await attrRepository.delete({ productApplicationId: In(appIds) });
     }
     await appRepository.delete({ productId });
 
@@ -1764,6 +1764,10 @@ export class ProductsService {
     await this.syncFaqs(manager, productId, input);
     await this.syncCertificates(manager, productId, input);
     await this.syncApplications(manager, productId, input);
+  }
+
+  async softDeleteProduct(id: string): Promise<ProductDetailDto> {
+    return this.updateStaffProduct(id, { status: ProductStatus.HIDDEN } as any);
   }
 
   private isUniqueConstraintError(error: unknown): boolean {

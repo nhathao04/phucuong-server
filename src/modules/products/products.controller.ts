@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -110,6 +112,17 @@ export class ProductsController {
     @Body() updateProductDto: UpdateProductDto,
   ): Promise<ProductDetailDto> {
     return this.productsService.updateStaffProduct(id, updateProductDto);
+  }
+
+  @Patch(":id/soft-delete")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Soft delete product (status → hidden)" })
+  @ApiParam({ name: "id", description: "Product UUID" })
+  @ApiResponse({ status: 200, type: ProductDetailDto })
+  softDelete(
+    @Param("id", ParseUUIDPipe) id: string,
+  ): Promise<ProductDetailDto> {
+    return this.productsService.softDeleteProduct(id);
   }
 
   @Get(":id/order-config")

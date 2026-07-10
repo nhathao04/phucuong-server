@@ -17,6 +17,7 @@ import { ProductAttribute } from "../products/entities/product-attribute.entity"
 import { ProductAttributeOption } from "../products/entities/product-attribute-option.entity";
 import { ProductContainerConfig } from "../products/entities/product-container-config.entity";
 import { ProductCountryConfig } from "../products/entities/product-country-config.entity";
+import { ProductTradeTerm } from "../products/entities/product-trade-term.entity";
 import { Country } from "../geography/entities/country.entity";
 import { Port } from "../geography/entities/port.entity";
 import { InquiryStepEvent } from "./entities/inquiry-step-event.entity";
@@ -194,7 +195,12 @@ export class InquiriesService {
         dto.destinationCountryId ?? inquiry.destinationCountryId ?? null;
       const quantity = Number(dto.quantity);
 
-      const container = await this.resolveContainerConfig(manager, productId);
+      const container = await this.resolveContainerConfig(
+        manager,
+        productId,
+        dto.containerCode ?? undefined,
+        dto.tradeTermCode ?? undefined,
+      );
       const moq = await this.resolveMoqMt(manager, productId, product, countryId);
       const calculation = this.computeProductCalculation(quantity, container, moq);
 
@@ -603,11 +609,40 @@ export class InquiriesService {
   // ── Auto calculation: Container Qty + MOQ Validation ──────────────────────
   // Pick the default container config for the product (or smallest if none flagged).
   // Falls back to product.quoteConfig.moq if no country-level config exists.
+  // Resolves container config by priority:
+  // 1. Explicit containerCode if provided
+  // 2. Default container for the selected trade term (tradeTermCode)
+  // 3. Global default container (isDefault=true)
+  // 4. Smallest capacity container
   private async resolveContainerConfig(
     manager: EntityManager,
     productId: string,
+    containerCode?: string | null,
+    tradeTermCode?: string | null,
   ): Promise<ProductContainerConfig | null> {
     const repo = manager.getRepository(ProductContainerConfig);
+
+    if (containerCode) {
+      const cfg = await repo.findOne({ where: { productId, containerCode } });
+      if (cfg) return cfg;
+    }
+
+    if (tradeTermCode) {
+      const tradeTermRepo = manager.getRepository(ProductTradeTerm);
+      const tradeTerm = await tradeTermRepo
+        .createQueryBuilder("pt")
+        .innerJoin("pt.tradeTerm", "tt")
+        .where("pt.productId = :productId", { productId })
+        .andWhere("tt.code = :code", { code: tradeTermCode.toUpperCase() })
+        .getOne();
+      if (tradeTerm) {
+        const defaultForTerm = await repo.findOne({
+          where: { productId, isDefault: true },
+        });
+        if (defaultForTerm) return defaultForTerm;
+      }
+    }
+
     const defaultCfg = await repo.findOne({
       where: { productId, isDefault: true },
     });
