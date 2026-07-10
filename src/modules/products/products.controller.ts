@@ -1,10 +1,12 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
   Param,
+  ParseIntPipe,
   Patch,
   Post,
   Query,
@@ -37,6 +39,10 @@ import {
 } from "./dto/product-response.dto";
 import { ProductsService } from "./products.service";
 import { ProductListQueryDto as PublicProductListQueryDto } from "./dto/product-list-query.dto";
+import {
+  CreateProductCategoryDto,
+  UpdateProductCategoryDto,
+} from "./dto/product-category.dto";
 
 @ApiTags("staff-products")
 @ApiBearerAuth()
@@ -221,5 +227,57 @@ export class StaffProductCategoriesController {
   @ApiResponse({ status: 200, type: [ProductCategorySummaryDto] })
   list(): Promise<ProductCategorySummaryDto[]> {
     return this.productsService.listCategories();
+  }
+
+  @Post()
+  @ApiOperation({ summary: "Create product category" })
+  @ApiResponse({ status: 201, type: ProductCategorySummaryDto })
+  @ApiResponse({ status: 409, description: "Slug already exists" })
+  create(
+    @Body() dto: CreateProductCategoryDto,
+  ): Promise<ProductCategorySummaryDto> {
+    return this.productsService.createCategory(dto);
+  }
+
+  @Get(":id")
+  @ApiOperation({ summary: "Get product category detail" })
+  @ApiParam({ name: "id", description: "Category ID", example: 12 })
+  @ApiResponse({ status: 200, type: ProductCategorySummaryDto })
+  @ApiResponse({ status: 404, description: "Category not found" })
+  detail(
+    @Param("id", ParseIntPipe) id: number,
+  ): Promise<ProductCategorySummaryDto> {
+    return this.productsService.getCategoryDetail(id);
+  }
+
+  @Patch(":id")
+  @ApiOperation({ summary: "Update product category" })
+  @ApiParam({ name: "id", description: "Category ID", example: 12 })
+  @ApiResponse({ status: 200, type: ProductCategorySummaryDto })
+  @ApiResponse({ status: 404, description: "Category not found" })
+  @ApiResponse({ status: 409, description: "Slug already exists" })
+  update(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() dto: UpdateProductCategoryDto,
+  ): Promise<ProductCategorySummaryDto> {
+    return this.productsService.updateCategory(id, dto);
+  }
+
+  @Delete(":id")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Soft delete product category (sets isActive = false)",
+  })
+  @ApiParam({ name: "id", description: "Category ID", example: 12 })
+  @ApiResponse({ status: 200, type: ProductCategorySummaryDto })
+  @ApiResponse({ status: 404, description: "Category not found" })
+  @ApiResponse({
+    status: 409,
+    description: "Cannot delete: category is still referenced by products",
+  })
+  softDelete(
+    @Param("id", ParseIntPipe) id: number,
+  ): Promise<ProductCategorySummaryDto> {
+    return this.productsService.softDeleteCategory(id);
   }
 }
