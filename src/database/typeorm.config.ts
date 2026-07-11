@@ -110,6 +110,15 @@ export const typeOrmAsyncConfig = (
   migrations: ["dist/database/migrations/*.js"],
   migrationsRun: false,
   autoLoadEntities: true,
+  extra: {
+    max: 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
+    statement_timeout: 15000,
+    query_timeout: 15000,
+  },
+  poolSize: 10,
+  connectTimeoutMS: 2000,
 });
 
 export const typeOrmModuleAsyncOptions: TypeOrmModuleAsyncOptions = {
