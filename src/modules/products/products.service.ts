@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { In, QueryFailedError, Repository, EntityManager } from "typeorm";
+import { In, QueryFailedError, Repository, EntityManager, FindOptionsWhere } from "typeorm";
 import {
   CreateProductDto,
   ProductAttributeValueInputDto,
@@ -559,33 +559,133 @@ export class ProductsService {
     productId: string,
     manager?: EntityManager,
   ): Promise<Product> {
-    const productRepository = manager
-      ? manager.getRepository(Product)
-      : this.productsRepository;
+    const product = await this.loadProductForDetailByWhere(
+      { id: productId },
+      manager,
+    );
+    if (!product) {
+      throw new NotFoundException(`Product ${productId} not found`);
+    }
+    return product;
+  }
 
-    const product = await productRepository.findOne({
-      where: { id: productId },
-      relations: {
-        productCategory: true,
-        countryConfigs: { country: true },
-        attributeMappings: { attribute: true, defaultOption: true },
-        attributeValues: { attribute: true },
-        containerConfigs: true,
-        tradeTerms: { tradeTerm: true },
-        faqs: true,
-        certificates: { certificate: true },
-        images: { asset: true },
-        technicalSpecifications: true,
-        packagingOptions: true,
-        targetBuyers: true,
-        whyChooseUs: true,
-        applications: { attributes: true },
-      },
-    });
-
+  private async loadProductForDetailByLookup(
+    lookup: FindOptionsWhere<Product>,
+  ): Promise<Product> {
+    const product = await this.loadProductForDetailByWhere(lookup);
     if (!product) {
       throw new NotFoundException("Product not found");
     }
+    return product;
+  }
+
+  private async loadProductForDetailByWhere(
+    where: FindOptionsWhere<Product>,
+    manager?: EntityManager,
+  ): Promise<Product | null> {
+    const repo = manager
+      ? manager.getRepository(Product)
+      : this.productsRepository;
+
+    const product = await repo.findOne({
+      where,
+      relations: { productCategory: true },
+    });
+
+    if (!product) {
+      return null;
+    }
+
+    const mgr = repo.manager;
+    const productId = product.id;
+    const [
+      countryConfigs,
+      attributeMappings,
+      attributeValues,
+      containerConfigs,
+      tradeTerms,
+      faqs,
+      certificates,
+      images,
+      technicalSpecifications,
+      packagingOptions,
+      targetBuyers,
+      whyChooseUs,
+      applications,
+    ] = await Promise.all([
+      mgr.getRepository(ProductCountryConfig).find({
+        where: { productId },
+        relations: { country: true },
+        order: { sortOrder: "ASC" },
+      }),
+      mgr.getRepository(ProductAttributeMapping).find({
+        where: { productId },
+        relations: { attribute: true, defaultOption: true },
+        order: { sortOrder: "ASC" },
+      }),
+      mgr.getRepository(ProductAttributeValue).find({
+        where: { productId },
+        relations: { attribute: true },
+        order: { sortOrder: "ASC" },
+      }),
+      mgr.getRepository(ProductContainerConfig).find({
+        where: { productId },
+      }),
+      mgr.getRepository(ProductTradeTerm).find({
+        where: { productId },
+        relations: { tradeTerm: true },
+        order: { sortOrder: "ASC" },
+      }),
+      mgr.getRepository(ProductFaq).find({
+        where: { productId },
+        order: { sortOrder: "ASC" },
+      }),
+      mgr.getRepository(ProductCertificate).find({
+        where: { productId },
+        relations: { certificate: true },
+        order: { sortOrder: "ASC" },
+      }),
+      mgr.getRepository(ProductImage).find({
+        where: { productId },
+        relations: { asset: true },
+        order: { sortOrder: "ASC" },
+      }),
+      mgr.getRepository(ProductTechnicalSpecification).find({
+        where: { productId },
+        order: { sortOrder: "ASC" },
+      }),
+      mgr.getRepository(ProductPackagingOption).find({
+        where: { productId },
+        order: { sortOrder: "ASC" },
+      }),
+      mgr.getRepository(ProductTargetBuyer).find({
+        where: { productId },
+        order: { sortOrder: "ASC" },
+      }),
+      mgr.getRepository(ProductWhyChooseUs).find({
+        where: { productId },
+        order: { sortOrder: "ASC" },
+      }),
+      mgr.getRepository(ProductApplication).find({
+        where: { productId },
+        relations: { attributes: true },
+        order: { sortOrder: "ASC" },
+      }),
+    ]);
+
+    product.countryConfigs = countryConfigs;
+    product.attributeMappings = attributeMappings;
+    product.attributeValues = attributeValues;
+    product.containerConfigs = containerConfigs;
+    product.tradeTerms = tradeTerms;
+    product.faqs = faqs;
+    product.certificates = certificates;
+    product.images = images;
+    product.technicalSpecifications = technicalSpecifications;
+    product.packagingOptions = packagingOptions;
+    product.targetBuyers = targetBuyers;
+    product.whyChooseUs = whyChooseUs;
+    product.applications = applications;
 
     return product;
   }
@@ -1841,16 +1941,12 @@ export class ProductsService {
         identifier,
       );
 
-    const product = isUuid
-      ? await this.productsRepository.findOne({ where: { id: identifier } })
-      : await this.productsRepository.findOne({ where: { slug: identifier } });
+    const lookupKey = isUuid
+      ? { id: identifier }
+      : { slug: identifier };
 
-    if (!product) {
-      throw new NotFoundException("Product not found");
-    }
-
-    const detailProduct = await this.loadProductForDetail(product.id);
-    return this.toDetailDto(detailProduct);
+    const product = await this.loadProductForDetailByLookup(lookupKey);
+    return this.toDetailDto(product);
   }
 
   async createStaffProduct(
