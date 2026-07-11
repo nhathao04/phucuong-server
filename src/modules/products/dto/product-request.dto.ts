@@ -168,6 +168,129 @@ const normalizeStringArray = (value: unknown): string[] | undefined => {
   return undefined;
 };
 
+/**
+ * Convert a human label (e.g. "Destination Port") into a stable, URL-friendly
+ * slug suitable for use as a JSON object key and an `attributeCode`.
+ *
+ *   "Destination Port"   -> "destinationPort"
+ *   "Quantity (MT)"      -> "quantityMt"
+ *   "Packing - Inner"    -> "packingInner"
+ *   "Số lượng"           -> "sLng"   (non-ASCII is stripped; empty falls back
+ *                                     to "field")
+ *
+ * The result is camelCase, lowercase-first, ASCII-only, and <= 80 chars.
+ *
+ * NOTE: also implemented as `ProductsService.slugifyFieldLabel` and called
+ * server-side from the pre-save hook (`assignGeneratedQuoteFieldKeys`).
+ * This export is kept only for unit-test parity and external helpers.
+ */
+export const slugifyFieldLabel = (label: string): string => {
+  const ascii = label
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "") // strip diacritics
+    .replace(/[^a-zA-Z0-9]+/g, " ") // non-alphanumerics → spaces
+    .trim();
+
+  if (!ascii) {
+    return "field";
+  }
+
+  const words = ascii.split(/\s+/).filter(Boolean);
+  const camel = words
+    .map((w, i) =>
+      i === 0
+        ? w.toLowerCase()
+        : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(),
+    )
+    .join("");
+
+  const safe = camel || "field";
+  return safe.slice(0, 80);
+};
+
+/**
+ * Walk the `fields` array and fill in any missing `key` based on the field's
+ * `label`. Preserves explicit client-provided keys. Disambiguates duplicates
+ * by suffixing the first occurrence with no suffix, the second with "2", etc.
+ *
+ * Pure function: returns a new array, never mutates input.
+ *
+ * NOTE: also implemented as `ProductsService.assignGeneratedFieldKeys` and
+ * invoked server-side from the pre-save hook. This export is kept only for
+ * unit-test parity and external helpers; the request DTO does NOT run a
+ * `@Transform` here because that would strip class-validator metadata on
+ * each field instance and break nested validation.
+ */
+export const assignGeneratedFieldKeys = <
+  T extends { key?: string | null; label?: string | null },
+>(
+  fields: T[],
+): T[] => {
+  const used = new Set<string>();
+  return fields.map((f) => {
+    const existing = (f.key ?? "").toString().trim();
+    if (existing) {
+      used.add(existing);
+      return f;
+    }
+
+    const base = slugifyFieldLabel(String(f.label ?? ""));
+    let candidate = base;
+    let n = 2;
+    while (used.has(candidate)) {
+      candidate = `${base}${n}`;
+      n += 1;
+    }
+    used.add(candidate);
+    return { ...f, key: candidate };
+  });
+};
+
+export class ProductAttributeMappingOptionInputDto {
+  @ApiPropertyOptional({ example: 17 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  optionId?: number | null;
+
+  @ApiProperty({ example: "Medium" })
+  @IsString()
+  @MaxLength(180)
+  value!: string;
+
+  @ApiPropertyOptional({ example: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  sortOrder?: number;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @Transform(({ value }) => normalizeBoolean(value))
+  @IsBoolean()
+  isActive?: boolean;
+
+  @ApiPropertyOptional({
+    example: false,
+    description:
+      "When true, selecting this option reveals a free-text field on the " +
+      "inquiry form (e.g. 'Other (please specify)').",
+  })
+  @IsOptional()
+  @Transform(({ value }) => normalizeBoolean(value))
+  @IsBoolean()
+  isCustomTrigger?: boolean;
+
+  @ApiPropertyOptional({
+    example: "Please specify",
+    description: "Placeholder for the custom value input when this option is selected.",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  customPlaceholder?: string | null;
+}
+
 export class ProductAttributeMappingInputDto {
   @ApiPropertyOptional({
     example: 12,
@@ -207,6 +330,23 @@ export class ProductAttributeMappingInputDto {
   @IsString()
   @MaxLength(180)
   defaultOptionValue?: string | null;
+
+  @ApiPropertyOptional({
+    type: "array",
+    description:
+      "Options for select-type attributes. Each item is upserted into " +
+      "`product_attribute_options` and matched by `attributeId + LOWER(value)`. " +
+      "Items missing `value` are ignored. `sortOrder` defaults to the array " +
+      "index. Existing options not present in this array are kept (no delete).",
+    example: [
+      { value: "Small", sortOrder: 0 },
+      { value: "Medium", sortOrder: 1 },
+      { value: "Large", sortOrder: 2 },
+    ],
+  })
+  @IsOptional()
+  @IsArray()
+  options?: ProductAttributeMappingOptionInputDto[];
 
   @ApiPropertyOptional({ example: true })
   @IsOptional()
@@ -645,11 +785,66 @@ export class ProductCertificateInputDto {
   sortOrder?: number;
 }
 
+export class ProductQuoteConfigFieldOptionInputDto {
+  @ApiProperty({ example: "PP Bag" })
+  @IsString()
+  @MaxLength(180)
+  value!: string;
+
+  @ApiPropertyOptional({ example: "PP Bag" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(180)
+  label?: string;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @Transform(({ value }) => normalizeBoolean(value))
+  @IsBoolean()
+  isActive?: boolean;
+
+  @ApiPropertyOptional({ example: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  sortOrder?: number;
+
+  @ApiPropertyOptional({
+    example: false,
+    description:
+      "When true, selecting this option reveals a free-text field on the " +
+      "inquiry form (e.g. 'Other (please specify)').",
+  })
+  @IsOptional()
+  @Transform(({ value }) => normalizeBoolean(value))
+  @IsBoolean()
+  isCustomTrigger?: boolean;
+
+  @ApiPropertyOptional({
+    example: "Describe your preferred option",
+    description:
+      "Placeholder for the custom value input when this option is selected.",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  customPlaceholder?: string | null;
+}
+
 export class ProductQuoteConfigFieldInputDto {
-  @ApiProperty({ example: "quantity" })
+  @ApiPropertyOptional({
+    example: "quantity",
+    description:
+      "Stable key used as the JSON property name and as the attributeCode " +
+      "in attribute_mappings. Optional — when omitted, the server auto-" +
+      "generates it from `label` (slugified to camelCase, ASCII-only). " +
+      "Duplicate keys within the same request are disambiguated with " +
+      "suffixes '2', '3', … Explicit keys are preserved as-is.",
+  })
+  @IsOptional()
   @IsString()
   @MaxLength(80)
-  key!: string;
+  key?: string;
 
   @ApiProperty({ example: "Quantity" })
   @IsString()
@@ -681,14 +876,37 @@ export class ProductQuoteConfigFieldInputDto {
   @IsInt()
   sortOrder?: number;
 
-  @ApiPropertyOptional({ type: "array" })
+  @ApiPropertyOptional({
+    type: [ProductQuoteConfigFieldOptionInputDto],
+    description:
+      "Options for select-type fields. Each item must include `value`. " +
+      "`sortOrder` defaults to the array index. `isActive` defaults to true. " +
+      "`isCustomTrigger` and `customPlaceholder` mirror the " +
+      "attribute-option semantics: when set, the inquiry form shows a " +
+      "free-text input next to the selected option.",
+    example: [
+      { value: "PP Bag", sortOrder: 0, isActive: true },
+      { value: "Bulk Loading", sortOrder: 1, isActive: true },
+    ],
+  })
   @IsOptional()
   @IsArray()
-  options?: Array<{ value: string; label: string }>;
+  @ValidateNested({ each: true })
+  @Type(() => ProductQuoteConfigFieldOptionInputDto)
+  options?: ProductQuoteConfigFieldOptionInputDto[];
 }
 
 export class ProductQuoteConfigInputDto {
-  @ApiPropertyOptional({ example: "1 container" })
+  @ApiPropertyOptional({
+    example: "1 container",
+    description:
+      "Minimum Order Quantity label.\n\n" +
+      "OPTIONAL: if you also send attributeValues with code 'moq' (e.g. { attributeCode: 'moq', value: '1 x 40ft containers' }), " +
+      "this field is AUTO-DERIVED when omitted and normalized to the parser-friendly form '<N> x <CODE>' " +
+      "(e.g. '1 x 40RF').\n\n" +
+      "Explicit values here always win over auto-derivation. Format expected by auto-calc: '<count> x <containerCode>' " +
+      "where 'containerCode' matches an entry in containerConfigs.",
+  })
   @IsOptional()
   @IsString()
   @MaxLength(120)
@@ -701,6 +919,12 @@ export class ProductQuoteConfigInputDto {
 
   @ApiPropertyOptional({
     type: [ProductQuoteConfigFieldInputDto],
+    description:
+      "Inquiry form fields shown to the customer. `key` is optional — when " +
+      "omitted, it is auto-generated by the server from `label` (camelCase, " +
+      "ASCII-only). Duplicate keys within the same request are " +
+      "disambiguated with `2`, `3`, … suffixes. Explicit keys are " +
+      "preserved as-is.",
   })
   @IsOptional()
   @IsArray()
@@ -880,7 +1104,12 @@ export class CreateProductDto {
 
   @ApiPropertyOptional({
     type: [ProductContainerConfigInputDto],
-    description: "Container capacity configurations for this product.",
+    description:
+      "Container capacity configurations used by inquiry auto-calculation (estimatedContainers, MOQ validation).\n\n" +
+      "OPTIONAL: if you also send `attributeValues` with codes `container_load` and `container_type`, this field is AUTO-DERIVED when omitted. " +
+      "Example: `attributeValues: [{ attributeCode: 'container_load', value: '~27 tonnes per 40ft container' }, { attributeCode: 'container_type', value: '40ft refrigerated (reefer)' }]` " +
+      "auto-creates `{ containerCode: '40RF', containerName: '40ft refrigerated (reefer)', capacityMt: 27, isDefault: true }`.\n\n" +
+      "Explicit values here always win over auto-derivation.",
   })
   @IsOptional()
   @IsArray()
@@ -1330,6 +1559,58 @@ export const CREATE_PRODUCT_SWAGGER_EXAMPLE: CreateProductDto = {
     { tradeTermCode: "CIF", isDefault: false, sortOrder: 3 },
   ],
 };
+
+/**
+ * Swagger example — minimal payload that RELIES ON AUTO-DERIVATION.
+ *
+ * Sends only `attributeValues` with the well-known codes
+ * (`container_load`, `container_type`, `moq`). The server auto-creates
+ * matching `containerConfigs` and `quoteConfig.moq`. Useful for FE when
+ * staff only fills the single "specifications + packing" form.
+ */
+export const CREATE_PRODUCT_AUTO_DERIVE_SWAGGER_EXAMPLE: CreateProductDto = {
+  name: "Frozen Coconut Water",
+  slug: "frozen-coconut-water",
+  productCode: "PC-FCW-001",
+  productCategorySlug: "coconut-products",
+  shortDescription:
+    "Fresh-frozen coconut water from Ben Tre, Vietnam — exporter grade.",
+  description:
+    "Frozen coconut water cubes/packs ready for beverage manufacturers.",
+  status: ProductStatus.PUBLISHED,
+  isActive: true,
+  quoteConfig: {
+    // moq OMITTED on purpose — will be auto-derived from attributeValues below
+    tradeTerms: ["FOB", "CNF", "CIF"],
+  },
+  attributeValues: [
+    // SPECIFICATIONS
+    { attributeCode: "product_type",      groupKey: ProductAttributeGroup.SPECIFICATIONS, value: "Frozen coconut water",         sectionLabel: "Product Overview", sortOrder: 1 },
+    { attributeCode: "origin",            groupKey: ProductAttributeGroup.SPECIFICATIONS, value: "Ben Tre, Vietnam",              sectionLabel: "Product Overview", sortOrder: 2 },
+    { attributeCode: "composition",       groupKey: ProductAttributeGroup.SPECIFICATIONS, value: "100% pure coconut water - no added water, sugar, or preservatives", sectionLabel: "Specifications", sortOrder: 3 },
+    { attributeCode: "processing",        groupKey: ProductAttributeGroup.SPECIFICATIONS, value: "Fresh-frozen (raw frozen)",    sectionLabel: "Specifications", sortOrder: 4 },
+    { attributeCode: "storage_conditions", groupKey: ProductAttributeGroup.SPECIFICATIONS, value: "−18°C or below",                sectionLabel: "Specifications", sortOrder: 5 },
+    { attributeCode: "shelf_life",        groupKey: ProductAttributeGroup.SPECIFICATIONS, value: "24 months",                     sectionLabel: "Specifications", sortOrder: 6 },
+    { attributeCode: "harvest_season",    groupKey: ProductAttributeGroup.SPECIFICATIONS, value: "Year-round",                    sectionLabel: "Specifications", sortOrder: 7 },
+
+    // PACKING — these 3 trigger auto-derivation ↓
+    { attributeCode: "packaging",     groupKey: ProductAttributeGroup.PACKING, value: "20kg/carton",                          sectionLabel: "Packing", sortOrder: 1 },
+    { attributeCode: "container_load", groupKey: ProductAttributeGroup.PACKING, value: "~27 tonnes per 40ft container",       sectionLabel: "Packing", sortOrder: 2 },
+    { attributeCode: "container_type", groupKey: ProductAttributeGroup.PACKING, value: "40ft refrigerated (reefer)",         sectionLabel: "Packing", sortOrder: 3 },
+    { attributeCode: "moq",           groupKey: ProductAttributeGroup.PACKING, value: "1 x 40ft containers",                 sectionLabel: "Packing", sortOrder: 4 },
+    // containerConfigs & quoteConfig.moq OMITTED on purpose.
+    // ↑ After this request, server creates:
+    //   containerConfigs: [{ containerCode: "40RF", containerName: "40ft refrigerated (reefer)", capacityMt: 27, isDefault: true }]
+    //   quoteConfig.moq: "1 x 40RF"
+  ],
+  // tradeTerms only — containerConfigs OMITTED on purpose
+  tradeTerms: [
+    { tradeTermCode: "FOB", isDefault: true, sortOrder: 1 },
+    { tradeTermCode: "CNF", isDefault: false, sortOrder: 2 },
+    { tradeTermCode: "CIF", isDefault: false, sortOrder: 3 },
+  ],
+};
+
 
 export const UPDATE_PRODUCT_REPLACE_CONFIGS_SWAGGER_EXAMPLE: UpdateProductDto =
   {

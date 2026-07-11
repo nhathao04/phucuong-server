@@ -10,6 +10,7 @@ import {
   ParseIntPipe,
   UseGuards,
   Request,
+  UnauthorizedException,
 } from "@nestjs/common";
 import {
   ApiTags,
@@ -27,6 +28,7 @@ import {
   QuotePublicResponseDto,
 } from "./dto/quote-response.dto";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
+import { StaffRoleGuard } from "../../common/guards/staff-role.guard";
 
 @ApiTags("Quotes")
 @Controller()
@@ -63,19 +65,45 @@ export class QuotesController {
   @ApiQuery({ name: "page", required: false })
   @ApiQuery({ name: "limit", required: false })
   @ApiQuery({ name: "search", required: false })
-  @ApiQuery({ name: "assignedToId", required: false })
+  @ApiQuery({ name: "assignedToId", required: false, type: String })
+  @ApiQuery({
+    name: "mine",
+    required: false,
+    type: Boolean,
+    description: "When true, restricts results to quotes assigned to the caller.",
+  })
   @ApiResponse({ status: 200, type: QuoteListResponseDto })
   async findAll(
     @Query("page") page?: number,
     @Query("limit") limit?: number,
     @Query("search") search?: string,
     @Query("assignedToId") assignedToId?: string,
+    @Query("mine") mine?: string,
+    @Request() req?: any,
   ): Promise<QuoteListResponseDto> {
+    const callerId = req?.user?.sub as string | undefined;
+    const isMine =
+      mine === "true" || mine === "1" || mine === "yes";
+
+    // Priority: explicit assignedToId wins over `mine`.
+    // If `mine=true` and no explicit assignedToId, filter by caller.
+    let resolvedAssignedToId: string | null | undefined;
+    if (assignedToId !== undefined && assignedToId !== null && assignedToId !== "") {
+      resolvedAssignedToId = assignedToId;
+    } else if (isMine) {
+      resolvedAssignedToId = callerId ?? null;
+      if (!resolvedAssignedToId) {
+        throw new UnauthorizedException(
+          "Cannot resolve caller from token",
+        );
+      }
+    }
+
     return this.quotesService.findAllStaff({
       page: page ? Number(page) : 1,
       limit: limit ? Number(limit) : 20,
       search,
-      assignedToId,
+      assignedToId: resolvedAssignedToId,
     });
   }
 
@@ -121,16 +149,27 @@ export class QuotesController {
   }
 
   @Put("staff/quotes/:id/assign")
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, StaffRoleGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: "Assign quote to staff" })
+  @ApiOperation({
+    summary:
+      "Toggle assignment for the calling staff: assigns to self if not yet assigned, unassigns if currently assigned to self. If assigned to another staff, it is claimed (reassigned to the caller).",
+  })
   @ApiParam({ name: "id", example: 1 })
   @ApiResponse({ status: 200, type: QuoteResponseDto })
+  @ApiResponse({ status: 401, description: "Missing or invalid token" })
+  @ApiResponse({ status: 403, description: "Caller is not staff/admin" })
+  @ApiResponse({ status: 404, description: "Quote not found" })
   async assign(
     @Param("id", ParseIntPipe) id: number,
-    @Body("assignedToId") assignedToId: string,
+    @Request() req: any,
   ): Promise<QuoteResponseDto> {
-    return this.quotesService.assignQuote(id, assignedToId);
+    const callerId = req.user?.sub;
+    if (!callerId) {
+      throw new UnauthorizedException("Invalid token: missing subject");
+    }
+
+    return this.quotesService.toggleAssignment(id, callerId);
   }
 
   @Delete("staff/quotes/:id")
