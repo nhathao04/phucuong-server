@@ -84,7 +84,7 @@ export class CertificatesService {
     const saved = await this.certificateRepository.save(
       this.certificateRepository.create({
         name,
-        status: dto.status ?? null,
+        isActive: dto.isActive ?? true,
         fileUrl: dto.fileUrl ?? null,
       }),
     );
@@ -114,7 +114,7 @@ export class CertificatesService {
       }
     }
 
-    if (dto.status !== undefined) certificate.status = dto.status;
+    if (dto.isActive !== undefined) certificate.isActive = dto.isActive;
     if (dto.fileUrl !== undefined) certificate.fileUrl = dto.fileUrl;
 
     const saved = await this.certificateRepository.save(certificate);
@@ -166,7 +166,7 @@ export class CertificatesService {
     return {
       id: certificate.id,
       name: certificate.name,
-      status: certificate.status,
+      isActive: certificate.isActive,
       fileUrl: certificate.fileUrl,
       productCount,
       createdAt: certificate.createdAt,

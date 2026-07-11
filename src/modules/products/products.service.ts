@@ -205,7 +205,6 @@ export class ProductsService {
       name: category.name,
       slug: category.slug,
       description: category.description ?? null,
-      sortOrder: category.sortOrder,
       isActive: category.isActive,
       createdAt: category.createdAt,
       updatedAt: category.updatedAt,
@@ -341,7 +340,7 @@ export class ProductsService {
     return {
       id: cert.id,
       name: cert.certificate?.name ?? "",
-      status: cert.certificate?.status ?? null,
+      isActive: cert.certificate?.isActive ?? true,
       fileUrl: cert.certificate?.fileUrl ?? null,
     };
   }
@@ -1624,7 +1623,7 @@ export class ProductsService {
           cert = await certificateRepository.save(
             certificateRepository.create({
               name: trimmedName,
-              status: item.status ?? null,
+              isActive: item.isActive ?? true,
               fileUrl: item.fileUrl ?? null,
             }),
           );
@@ -2249,7 +2248,7 @@ export class ProductsService {
 
   async listCategories(): Promise<ProductCategorySummaryDto[]> {
     const categories = await this.productCategoriesRepository.find({
-      order: { sortOrder: "ASC", createdAt: "ASC" },
+      order: { createdAt: "ASC" },
     });
 
     return categories.map((cat) => ({
@@ -2257,7 +2256,6 @@ export class ProductsService {
       name: cat.name,
       slug: cat.slug,
       description: cat.description ?? null,
-      sortOrder: cat.sortOrder,
       isActive: cat.isActive,
       createdAt: cat.createdAt,
       updatedAt: cat.updatedAt,
@@ -2267,7 +2265,7 @@ export class ProductsService {
   async listActiveCategories(): Promise<ProductCategorySummaryDto[]> {
     const categories = await this.productCategoriesRepository.find({
       where: { isActive: true },
-      order: { sortOrder: "ASC", createdAt: "ASC" },
+      order: { createdAt: "ASC" },
     });
 
     return categories.map((cat) => ({
@@ -2275,7 +2273,6 @@ export class ProductsService {
       name: cat.name,
       slug: cat.slug,
       description: cat.description ?? null,
-      sortOrder: cat.sortOrder,
       isActive: cat.isActive,
       createdAt: cat.createdAt,
       updatedAt: cat.updatedAt,
@@ -2295,7 +2292,7 @@ export class ProductsService {
   async createCategory(
     dto: CreateProductCategoryDto,
   ): Promise<ProductCategorySummaryDto> {
-    const slug = this.resolveSlug(dto.name, dto.slug);
+    const slug = this.resolveSlug(dto.name, undefined);
 
     const existing = await this.productCategoriesRepository.findOne({
       where: { slug },
@@ -2310,7 +2307,6 @@ export class ProductsService {
       name: dto.name,
       slug,
       description: dto.description ?? null,
-      sortOrder: dto.sortOrder ?? 0,
       isActive: dto.isActive ?? true,
     });
 
@@ -2350,7 +2346,6 @@ export class ProductsService {
     if (dto.name !== undefined) category.name = dto.name;
     if (dto.description !== undefined)
       category.description = dto.description ?? null;
-    if (dto.sortOrder !== undefined) category.sortOrder = dto.sortOrder;
     if (dto.isActive !== undefined) category.isActive = dto.isActive;
 
     const saved = await this.productCategoriesRepository.save(category);
@@ -2390,7 +2385,6 @@ export class ProductsService {
       name: cat.name,
       slug: cat.slug,
       description: cat.description ?? null,
-      sortOrder: cat.sortOrder,
       isActive: cat.isActive,
       createdAt: cat.createdAt,
       updatedAt: cat.updatedAt,

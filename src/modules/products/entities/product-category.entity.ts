@@ -24,9 +24,6 @@ export class ProductCategory {
   @Column({ type: "text", nullable: true })
   description!: string | null;
 
-  @Column({ type: "integer", default: 0 })
-  sortOrder!: number;
-
   @Column({ type: "boolean", default: true })
   isActive!: boolean;
 
