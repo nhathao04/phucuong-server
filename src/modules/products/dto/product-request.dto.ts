@@ -688,7 +688,16 @@ export class ProductQuoteConfigFieldInputDto {
 }
 
 export class ProductQuoteConfigInputDto {
-  @ApiPropertyOptional({ example: "1 container" })
+  @ApiPropertyOptional({
+    example: "1 container",
+    description:
+      "Minimum Order Quantity label.\n\n" +
+      "OPTIONAL: if you also send attributeValues with code 'moq' (e.g. { attributeCode: 'moq', value: '1 x 40ft containers' }), " +
+      "this field is AUTO-DERIVED when omitted and normalized to the parser-friendly form '<N> x <CODE>' " +
+      "(e.g. '1 x 40RF').\n\n" +
+      "Explicit values here always win over auto-derivation. Format expected by auto-calc: '<count> x <containerCode>' " +
+      "where 'containerCode' matches an entry in containerConfigs.",
+  })
   @IsOptional()
   @IsString()
   @MaxLength(120)
@@ -880,7 +889,12 @@ export class CreateProductDto {
 
   @ApiPropertyOptional({
     type: [ProductContainerConfigInputDto],
-    description: "Container capacity configurations for this product.",
+    description:
+      "Container capacity configurations used by inquiry auto-calculation (estimatedContainers, MOQ validation).\n\n" +
+      "OPTIONAL: if you also send `attributeValues` with codes `container_load` and `container_type`, this field is AUTO-DERIVED when omitted. " +
+      "Example: `attributeValues: [{ attributeCode: 'container_load', value: '~27 tonnes per 40ft container' }, { attributeCode: 'container_type', value: '40ft refrigerated (reefer)' }]` " +
+      "auto-creates `{ containerCode: '40RF', containerName: '40ft refrigerated (reefer)', capacityMt: 27, isDefault: true }`.\n\n" +
+      "Explicit values here always win over auto-derivation.",
   })
   @IsOptional()
   @IsArray()
@@ -1330,6 +1344,58 @@ export const CREATE_PRODUCT_SWAGGER_EXAMPLE: CreateProductDto = {
     { tradeTermCode: "CIF", isDefault: false, sortOrder: 3 },
   ],
 };
+
+/**
+ * Swagger example — minimal payload that RELIES ON AUTO-DERIVATION.
+ *
+ * Sends only `attributeValues` with the well-known codes
+ * (`container_load`, `container_type`, `moq`). The server auto-creates
+ * matching `containerConfigs` and `quoteConfig.moq`. Useful for FE when
+ * staff only fills the single "specifications + packing" form.
+ */
+export const CREATE_PRODUCT_AUTO_DERIVE_SWAGGER_EXAMPLE: CreateProductDto = {
+  name: "Frozen Coconut Water",
+  slug: "frozen-coconut-water",
+  productCode: "PC-FCW-001",
+  productCategorySlug: "coconut-products",
+  shortDescription:
+    "Fresh-frozen coconut water from Ben Tre, Vietnam — exporter grade.",
+  description:
+    "Frozen coconut water cubes/packs ready for beverage manufacturers.",
+  status: ProductStatus.PUBLISHED,
+  isActive: true,
+  quoteConfig: {
+    // moq OMITTED on purpose — will be auto-derived from attributeValues below
+    tradeTerms: ["FOB", "CNF", "CIF"],
+  },
+  attributeValues: [
+    // SPECIFICATIONS
+    { attributeCode: "product_type",      groupKey: ProductAttributeGroup.SPECIFICATIONS, value: "Frozen coconut water",         sectionLabel: "Product Overview", sortOrder: 1 },
+    { attributeCode: "origin",            groupKey: ProductAttributeGroup.SPECIFICATIONS, value: "Ben Tre, Vietnam",              sectionLabel: "Product Overview", sortOrder: 2 },
+    { attributeCode: "composition",       groupKey: ProductAttributeGroup.SPECIFICATIONS, value: "100% pure coconut water - no added water, sugar, or preservatives", sectionLabel: "Specifications", sortOrder: 3 },
+    { attributeCode: "processing",        groupKey: ProductAttributeGroup.SPECIFICATIONS, value: "Fresh-frozen (raw frozen)",    sectionLabel: "Specifications", sortOrder: 4 },
+    { attributeCode: "storage_conditions", groupKey: ProductAttributeGroup.SPECIFICATIONS, value: "−18°C or below",                sectionLabel: "Specifications", sortOrder: 5 },
+    { attributeCode: "shelf_life",        groupKey: ProductAttributeGroup.SPECIFICATIONS, value: "24 months",                     sectionLabel: "Specifications", sortOrder: 6 },
+    { attributeCode: "harvest_season",    groupKey: ProductAttributeGroup.SPECIFICATIONS, value: "Year-round",                    sectionLabel: "Specifications", sortOrder: 7 },
+
+    // PACKING — these 3 trigger auto-derivation ↓
+    { attributeCode: "packaging",     groupKey: ProductAttributeGroup.PACKING, value: "20kg/carton",                          sectionLabel: "Packing", sortOrder: 1 },
+    { attributeCode: "container_load", groupKey: ProductAttributeGroup.PACKING, value: "~27 tonnes per 40ft container",       sectionLabel: "Packing", sortOrder: 2 },
+    { attributeCode: "container_type", groupKey: ProductAttributeGroup.PACKING, value: "40ft refrigerated (reefer)",         sectionLabel: "Packing", sortOrder: 3 },
+    { attributeCode: "moq",           groupKey: ProductAttributeGroup.PACKING, value: "1 x 40ft containers",                 sectionLabel: "Packing", sortOrder: 4 },
+    // containerConfigs & quoteConfig.moq OMITTED on purpose.
+    // ↑ After this request, server creates:
+    //   containerConfigs: [{ containerCode: "40RF", containerName: "40ft refrigerated (reefer)", capacityMt: 27, isDefault: true }]
+    //   quoteConfig.moq: "1 x 40RF"
+  ],
+  // tradeTerms only — containerConfigs OMITTED on purpose
+  tradeTerms: [
+    { tradeTermCode: "FOB", isDefault: true, sortOrder: 1 },
+    { tradeTermCode: "CNF", isDefault: false, sortOrder: 2 },
+    { tradeTermCode: "CIF", isDefault: false, sortOrder: 3 },
+  ],
+};
+
 
 export const UPDATE_PRODUCT_REPLACE_CONFIGS_SWAGGER_EXAMPLE: UpdateProductDto =
   {

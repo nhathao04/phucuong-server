@@ -1681,7 +1681,7 @@ export class ProductsService {
       const savedApp = await appRepository.save(app);
 
       if (appInput.attributes && appInput.attributes.length > 0) {
-        const attrEntries = appInput.attributes.map(
+        savedApp.attributes = appInput.attributes.map(
           (attr: ProductApplicationAttributeInputDto, idx: number) =>
             attrRepository.create({
               productApplicationId: savedApp.id,
@@ -1690,7 +1690,7 @@ export class ProductsService {
               sortOrder: attr.sortOrder ?? idx,
             }),
         );
-        await attrRepository.save(attrEntries);
+        await appRepository.save(savedApp);
       }
     }
   }
@@ -1851,11 +1851,17 @@ export class ProductsService {
     productId: string,
     input: CreateProductDto | UpdateProductDto,
   ): Promise<void> {
-    await this.syncAttributeValues(manager, productId, input);
-    await this.syncAttributeMappings(manager, productId, input);
-    await this.syncContainerConfigs(manager, productId, input);
-    await this.syncCountryConfigs(manager, productId, input);
-    await this.syncImages(manager, productId, input);
+  // Auto-derive containerConfigs and quoteConfig.moq from attributeValues
+  // when FE doesn't send them explicitly. Keeps display (attributeValues) and
+  // auto-calc (containerConfigs + quoteConfig.moq) in sync without forcing
+  // staff to fill 2 places.
+  this.deriveContainerAndMoqFromAttributes(input);
+
+  await this.syncAttributeValues(manager, productId, input);
+  await this.syncAttributeMappings(manager, productId, input);
+  await this.syncContainerConfigs(manager, productId, input);
+  await this.syncCountryConfigs(manager, productId, input);
+  await this.syncImages(manager, productId, input);
     await this.syncTechnicalSpecifications(manager, productId, input);
     await this.syncPackagingOptions(manager, productId, input);
     await this.syncTargetBuyers(manager, productId, input);
@@ -1864,6 +1870,158 @@ export class ProductsService {
     await this.syncFaqs(manager, productId, input);
     await this.syncCertificates(manager, productId, input);
     await this.syncApplications(manager, productId, input);
+  }
+
+  /**
+   * Auto-derive functional config (containerConfigs + quoteConfig.moq) from
+   * display attributes so the two sources stay in sync.
+   *
+   * Reads three well-known attribute codes from `attributeValues`:
+   *   • `container_load`  — e.g. "~27 tonnes per 40ft container" or
+   *                          "~27 MT per 40HQ"
+   *   • `container_type`  — e.g. "40ft refrigerated (reefer)"
+   *   • `moq`             — e.g. "1 x 40ft containers" or "1 x 40RF"
+   *
+   * Side effects (mutates `input` in place, only when FE did NOT send the
+   * corresponding field, so explicit values always win):
+   *   1. `containerConfigs` is populated from `container_load`+
+   *      `container_type`.
+   *   2. `quoteConfig.moq` is normalized into the parser-friendly form
+   *      `"<N> x <CODE>"` expected by `resolveMoqMt()`.
+   */
+  private deriveContainerAndMoqFromAttributes(
+    input: CreateProductDto | UpdateProductDto,
+  ): void {
+    const configInput = input as ProductConfigPayload;
+    const attrs = configInput.attributeValues;
+    if (!attrs?.length) return;
+
+    const findByCode = (code: string): string | null => {
+      const hit = attrs.find(
+        (item) => item.attributeCode?.trim().toLowerCase() === code,
+      );
+      if (!hit?.value) return null;
+      const trimmed = hit.value.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    };
+
+    const containerLoad = findByCode("container_load");
+    const containerType = findByCode("container_type");
+    const moqValue = findByCode("moq");
+
+    // ── 1) Derive containerConfigs if FE didn't send it ───────────────────
+    if (!configInput.containerConfigs && containerLoad) {
+      const capacity = this.extractCapacityMt(containerLoad);
+      if (capacity !== null) {
+        const typeText =
+          containerType ?? this.extractContainerTypeAfterPer(containerLoad);
+        const containerCode = this.deriveContainerCode(
+          typeText ?? containerLoad,
+        );
+
+        if (containerCode) {
+          configInput.containerConfigs = [
+            {
+              containerCode,
+              containerName:
+                typeText?.trim() ||
+                `${capacity} MT container`,
+              capacityMt: capacity,
+              isDefault: true,
+            },
+          ];
+        }
+      }
+    }
+
+    // ── 2) Derive quoteConfig.moq if FE didn't send it ─────────────────────
+    if (moqValue && !configInput.quoteConfig?.moq) {
+      const parsed = this.parseMoqString(moqValue);
+      const containerCode =
+        configInput.containerConfigs?.[0]?.containerCode ??
+        this.deriveContainerCode(moqValue);
+
+      let moqLabel: string | null = null;
+      if (parsed && containerCode) {
+        moqLabel = `${parsed.count} x ${containerCode}`;
+      } else if (parsed) {
+        // No container code resolved — keep original wording
+        moqLabel = moqValue;
+      } else {
+        moqLabel = moqValue;
+      }
+
+      if (!configInput.quoteConfig) {
+        configInput.quoteConfig = { moq: moqLabel };
+      } else {
+        configInput.quoteConfig.moq = moqLabel;
+      }
+    }
+  }
+
+  /**
+   * Pull the first numeric value followed by tonnes/tấn/MT/ton.
+   * Examples it matches:
+   *   "~27 tonnes per 40ft container" → 27
+   *   "~27 MT per 40HQ"               → 27
+   *   "≈ 27.5 tonnes"                  → 27.5
+   */
+  private extractCapacityMt(text: string): number | null {
+    const match = text.match(
+      /(\d+(?:\.\d+)?)\s*(?:tonnes?|tấn|\bmt\b|tons?)/i,
+    );
+    if (!match) return null;
+    const value = parseFloat(match[1]);
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }
+
+  /**
+   * Extract container type hint from text after "per" or "/".
+   * Example: "~27 tonnes per 40ft container" → "40ft container".
+   */
+  private extractContainerTypeAfterPer(text: string): string | null {
+    const match = text.match(/(?:per|\/)\s*(.+)$/i);
+    return match ? match[1].trim() : null;
+  }
+
+  /**
+   * Try to map free-form container description to a canonical ISO-like code
+   * (e.g. "40ft refrigerated", "40RF", "40ft reefer", "40HQ").
+   * Returns null if no recognizable code is found.
+   */
+  private deriveContainerCode(text: string | null | undefined): string | null {
+    if (!text) return null;
+    const upper = text.toUpperCase();
+
+    const isoMatch = upper.match(
+      /\b((?:20|40|45)\s*(?:FT|RF|HQ|RH|RE|DV|DC|DRY|REEFER|HIGH|OT))\b/,
+    );
+    if (isoMatch) {
+      return isoMatch[1].replace(/\s+/g, "");
+    }
+
+    // Plain "40ft" / "20ft" → pad to 4 chars: 40FT / 20FT
+    const plainMatch = upper.match(/\b((?:20|40|45)\s*FT)\b/);
+    if (plainMatch) return plainMatch[1].replace(/\s+/g, "");
+
+    return null;
+  }
+
+  /**
+   * Parse MOQ strings into (count, raw) when possible.
+   * Examples:
+   *   "1 x 40ft containers"     → { count: 1, raw: "1 x 40ft containers" }
+   *   "2 x 20FT"                → { count: 2, raw: "2 x 20FT" }
+   *   "5 containers"            → null (no "N x CODE" pattern)
+   */
+  private parseMoqString(
+    text: string,
+  ): { count: number; raw: string } | null {
+    const match = text.match(/^\s*(\d+(?:\.\d+)?)\s*[xX×]\s*([A-Za-z0-9 ]+?)\s*$/);
+    if (!match) return null;
+    const count = parseFloat(match[1]);
+    if (!Number.isFinite(count) || count <= 0) return null;
+    return { count, raw: text.trim() };
   }
 
   async softDeleteProduct(id: string): Promise<ProductDetailDto> {
@@ -1949,31 +2107,27 @@ export class ProductsService {
     createProductDto: CreateProductDto,
   ): Promise<ProductDetailDto> {
     try {
-      return await this.productsRepository.manager.transaction(
+      const savedProduct = await this.productsRepository.manager.transaction(
         async (manager) => {
           const productRepository = manager.getRepository(Product);
           const product = productRepository.create(
             await this.buildProductPayload(createProductDto),
           );
-
-          const savedProduct = await productRepository.save(product);
+          const saved = await productRepository.save(product);
           await this.syncProductConfigurations(
             manager,
-            savedProduct.id,
+            saved.id,
             createProductDto,
           );
-          const detailProduct = await this.loadProductForDetail(
-            savedProduct.id,
-            manager,
-          );
-          return this.toDetailDto(detailProduct);
+          return saved;
         },
       );
+      const detailProduct = await this.loadProductForDetail(savedProduct.id);
+      return this.toDetailDto(detailProduct);
     } catch (error) {
       if (this.isUniqueConstraintError(error)) {
         throw new ConflictException("Product slug already exists");
       }
-
       throw error;
     }
   }
@@ -1983,7 +2137,7 @@ export class ProductsService {
     updateProductDto: UpdateProductDto,
   ): Promise<ProductDetailDto> {
     try {
-      return await this.productsRepository.manager.transaction(
+      const savedProduct = await this.productsRepository.manager.transaction(
         async (manager) => {
           const productRepository = manager.getRepository(Product);
           const product = await productRepository.findOne({ where: { id } });
@@ -1997,19 +2151,17 @@ export class ProductsService {
             await this.buildProductPayload(updateProductDto, product),
           );
 
-          const savedProduct = await productRepository.save(updatedProduct);
+          const saved = await productRepository.save(updatedProduct);
           await this.syncProductConfigurations(
             manager,
-            savedProduct.id,
+            saved.id,
             updateProductDto,
           );
-          const detailProduct = await this.loadProductForDetail(
-            savedProduct.id,
-            manager,
-          );
-          return this.toDetailDto(detailProduct);
+          return saved;
         },
       );
+      const detailProduct = await this.loadProductForDetail(savedProduct.id);
+      return this.toDetailDto(detailProduct);
     } catch (error) {
       if (this.isUniqueConstraintError(error)) {
         throw new ConflictException("Product slug already exists");
