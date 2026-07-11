@@ -43,7 +43,20 @@ export class StaffCertificatesController {
       "products currently attach to it). Search by name with " +
       "`?search=iso` (case-insensitive substring).",
   })
-  @ApiResponse({ status: 200, type: [CertificateResponseDto] })
+  @ApiResponse({
+    status: 200,
+    type: [CertificateResponseDto],
+    example: [
+      {
+        id: "550e8400-e29b-41d4-a716-446655440099",
+        name: "ISO 9001:2015",
+        isActive: true,
+        fileUrl: "https://cdn.example.com/certificates/iso-9001.pdf",
+        productCount: 3,
+        createdAt: "2026-06-28T10:00:00.000Z",
+      },
+    ],
+  })
   list(
     @Query() query: CertificateListQueryDto,
   ): Promise<CertificateResponseDto[]> {
@@ -139,15 +152,25 @@ export class PublicCertificatesController {
   @ApiOperation({
     summary: "List active certificates (public)",
     description:
-      "Returns all certificates that are not marked as inactive/expired. " +
-      "All active certificates are returned regardless of whether they are attached to any product.",
+      "Returns all certificates with `isActive = true`. " +
+      "Inactive certificates are filtered out regardless of whether they are attached to any product.",
   })
-  @ApiResponse({ status: 200, type: [CertificateResponseDto] })
+  @ApiResponse({
+    status: 200,
+    type: [CertificateResponseDto],
+    example: [
+      {
+        id: "550e8400-e29b-41d4-a716-446655440099",
+        name: "ISO 9001:2015",
+        isActive: true,
+        fileUrl: "https://cdn.example.com/certificates/iso-9001.pdf",
+        productCount: 3,
+        createdAt: "2026-06-28T10:00:00.000Z",
+      },
+    ],
+  })
   async list(): Promise<CertificateResponseDto[]> {
     const all = await this.certificatesService.list({});
-    // Filter out certificates explicitly marked as inactive/expired
-    return all.filter(
-      (cert) => cert.status !== "inactive" && cert.status !== "expired",
-    );
+    return all.filter((cert) => cert.isActive === true);
   }
 }

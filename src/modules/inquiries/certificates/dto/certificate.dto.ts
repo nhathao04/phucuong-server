@@ -1,6 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform } from "class-transformer";
-import { IsOptional, IsString, MaxLength } from "class-validator";
+import {
+  IsBoolean,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from "class-validator";
 
 export class CreateCertificateDto {
   @ApiProperty({
@@ -12,15 +17,14 @@ export class CreateCertificateDto {
   name!: string;
 
   @ApiPropertyOptional({
-    example: "available",
+    example: true,
     description:
-      "Free-form status badge (e.g. 'available', 'pending', 'expired'). " +
-      "Stored as a string so future statuses don't require a migration.",
+      "Whether the certificate is active and publicly listable. Defaults to true.",
+    default: true,
   })
   @IsOptional()
-  @IsString()
-  @MaxLength(60)
-  status?: string | null;
+  @IsBoolean()
+  isActive?: boolean;
 
   @ApiPropertyOptional({
     example: "https://cdn.example.com/certificates/iso-9001.pdf",
@@ -39,11 +43,10 @@ export class UpdateCertificateDto {
   @MaxLength(150)
   name?: string;
 
-  @ApiPropertyOptional({ example: "available" })
+  @ApiPropertyOptional({ example: true })
   @IsOptional()
-  @IsString()
-  @MaxLength(60)
-  status?: string | null;
+  @IsBoolean()
+  isActive?: boolean;
 
   @ApiPropertyOptional({
     example: "https://cdn.example.com/certificates/iso-9001.pdf",
@@ -75,8 +78,8 @@ export class CertificateResponseDto {
   @ApiProperty({ example: "ISO 9001:2015" })
   name!: string;
 
-  @ApiPropertyOptional({ example: "available" })
-  status!: string | null;
+  @ApiProperty({ example: true })
+  isActive!: boolean;
 
   @ApiPropertyOptional({
     example: "https://cdn.example.com/certificates/iso-9001.pdf",
