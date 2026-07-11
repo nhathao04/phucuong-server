@@ -38,16 +38,26 @@ export interface ProductHero {
   stats?: Array<{ value: string; label: string }>;
 }
 
+export interface ProductQuoteConfigOption {
+  value: string;
+  label?: string;
+  isActive?: boolean;
+  sortOrder?: number;
+  isCustomTrigger?: boolean;
+  customPlaceholder?: string | null;
+}
+
 export interface ProductQuoteConfig {
   moq?: string | null;
   tradeTerms?: string[];
   fields?: Array<{
-    key: string;
+    key?: string;
     label: string;
     type: "text" | "number" | "select" | "textarea" | "date";
     unit?: string | null;
     required?: boolean;
-    options?: Array<{ value: string; label: string }>;
+    sortOrder?: number;
+    options?: ProductQuoteConfigOption[];
   }>;
 }
 

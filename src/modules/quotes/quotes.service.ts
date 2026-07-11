@@ -82,29 +82,33 @@ export class QuotesService {
     page?: number;
     limit?: number;
     search?: string;
-    assignedToId?: string;
+    assignedToId?: string | null;
   }): Promise<QuoteListResponseDto> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const qb = this.quoteRepo
+      .createQueryBuilder("quote")
+      .leftJoinAndSelect("quote.assignedTo", "assignedTo");
 
-    if (params.assignedToId) {
-      where.assignedToId = params.assignedToId;
+    if (params.assignedToId !== undefined && params.assignedToId !== null) {
+      qb.andWhere("quote.assignedToId = :assignedToId", {
+        assignedToId: params.assignedToId,
+      });
     }
 
     if (params.search) {
-      where.customerName = Like(`%${params.search}%`);
+      qb.andWhere("quote.customerName ILIKE :search", {
+        search: `%${params.search}%`,
+      });
     }
 
-    const [quotes, total] = await this.quoteRepo.findAndCount({
-      where,
-      order: { createdAt: "DESC" },
-      skip,
-      take: limit,
-      relations: ["assignedTo"],
-    });
+    qb.orderBy("quote.createdAt", "DESC")
+      .skip(skip)
+      .take(limit);
+
+    const [quotes, total] = await qb.getManyAndCount();
 
     return {
       data: quotes.map((q) => this.toResponseDto(q)),
@@ -172,23 +176,47 @@ export class QuotesService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Staff: Assign quote to a staff member
+  // Staff: Toggle assignment based on the caller's identity (from JWT)
+  //   - assignedToId === null      → assign to caller
+  //   - assignedToId === callerId  → unassign
+  //   - assignedToId === otherId   → reassign to caller (claim)
   // ─────────────────────────────────────────────────────────────────────────────
 
-  async assignQuote(id: number, assignedToId: string): Promise<QuoteResponseDto> {
+  async toggleAssignment(
+    id: number,
+    callerId: string,
+  ): Promise<QuoteResponseDto> {
     const quote = await this.quoteRepo.findOne({ where: { id } });
     if (!quote) {
-      throw new NotFoundException("Quote not found");
+      throw new NotFoundException(`Quote ${id} not found`);
     }
 
-    const user = await this.userRepo.findOne({ where: { id: assignedToId } });
-    if (!user) {
-      throw new NotFoundException("Staff user not found");
+    let nextAssignee: string | null;
+    if (quote.assignedToId === null) {
+      nextAssignee = callerId;
+    } else if (quote.assignedToId === callerId) {
+      nextAssignee = null;
+    } else {
+      nextAssignee = callerId;
     }
 
-    quote.assignedToId = assignedToId;
+    if (nextAssignee === null) {
+      quote.assignedToId = null;
+      quote.assignedTo = null;
+    } else {
+      const user = await this.userRepo.findOne({
+        where: { id: nextAssignee },
+      });
+      if (!user || user.isActive === false) {
+        throw new NotFoundException(
+          `Staff user ${nextAssignee} not found or inactive`,
+        );
+      }
+      quote.assignedToId = nextAssignee;
+      quote.assignedTo = user;
+    }
+
     await this.quoteRepo.save(quote);
-
     return this.findOneStaff(id);
   }
 

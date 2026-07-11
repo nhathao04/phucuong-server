@@ -45,14 +45,13 @@ import {
   ProductListItemDto,
   ProductListResponseDto,
   ProductOrderConfigDto,
-  InquiryOrderAttributeMappingDto,
-  InquiryOrderAttributeOptionDto,
   InquiryOrderContainerConfigDto,
   InquiryOrderCountryConfigDto,
   InquiryOrderTradeTermDto,
   ProductPackagingOptionDto,
   ProductQuoteConfigDto,
   ProductQuoteConfigFieldDto,
+  ProductQuoteConfigFieldOptionDto,
   ProductSummaryDto,
   ProductTargetBuyerDto,
   ProductTechnicalSpecificationDto,
@@ -448,14 +447,37 @@ export class ProductsService {
         ? quoteConfig.tradeTerms
         : [],
       fields: Array.isArray(quoteConfig.fields)
-        ? quoteConfig.fields.map<ProductQuoteConfigFieldDto>((field) => ({
-            key: field.key,
-            label: field.label,
-            type: field.type,
-            unit: field.unit ?? null,
-            required: Boolean(field.required),
-            options: Array.isArray(field.options) ? field.options : [],
-          }))
+        ? quoteConfig.fields
+            .slice()
+            .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+            .map<ProductQuoteConfigFieldDto>((field) => {
+              const rawOptions = Array.isArray(field.options)
+                ? field.options
+                : [];
+              return {
+                key:
+                  field.key ??
+                  this.slugifyFieldLabel(field.label),
+                label: field.label,
+                type: field.type,
+                unit: field.unit ?? null,
+                required: Boolean(field.required),
+                sortOrder: field.sortOrder ?? 0,
+                options: rawOptions
+                  .slice()
+                  .sort(
+                    (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0),
+                  )
+                  .map<ProductQuoteConfigFieldOptionDto>((opt) => ({
+                    value: opt.value,
+                    label: opt.label ?? opt.value,
+                    isActive: opt.isActive ?? true,
+                    sortOrder: opt.sortOrder ?? 0,
+                    isCustomTrigger: opt.isCustomTrigger ?? false,
+                    customPlaceholder: opt.customPlaceholder ?? null,
+                  })),
+              };
+            })
         : [],
     };
   }
@@ -1101,6 +1123,97 @@ export class ProductsService {
         .getOne();
     };
 
+    // Upsert options for any mapping that sent them. Strategy:
+    //   - Match by (attributeId, LOWER(value)) OR explicit optionId
+    //   - Items without value are skipped
+    //   - Existing options for the attribute NOT mentioned are PRESERVED
+    //     (no destructive delete — protects options other products may reuse)
+    //   - Returns a value-level map to help the mapping loop resolve a default
+    //     by value even if the same option was just upserted.
+    const allOptionAttributes = Array.from(
+      new Set(
+        resolvedMappings
+          .map((m) => m.input.options?.length ? m.attributeId : null)
+          .filter((id): id is number => typeof id === "number"),
+      ),
+    );
+
+    const optionByAttributeAndValue: Map<
+      number,
+      Map<string, ProductAttributeOption>
+    > = new Map();
+
+    if (allOptionAttributes.length > 0) {
+      const existingOptionsByAttr = await optionRepository.find({
+        where: { attributeId: In(allOptionAttributes) },
+        order: { sortOrder: "ASC" },
+      });
+      for (const opt of existingOptionsByAttr) {
+        const bucket =
+          optionByAttributeAndValue.get(opt.attributeId) ??
+          new Map<string, ProductAttributeOption>();
+        bucket.set(opt.value.trim().toLowerCase(), opt);
+        optionByAttributeAndValue.set(opt.attributeId, bucket);
+      }
+
+      for (const mapping of resolvedMappings) {
+        const optionInputs = mapping.input.options;
+        if (!optionInputs?.length) continue;
+        const attributeId = mapping.attributeId;
+        const bucket =
+          optionByAttributeAndValue.get(attributeId) ??
+          new Map<string, ProductAttributeOption>();
+
+        for (let i = 0; i < optionInputs.length; i += 1) {
+          const inp = optionInputs[i];
+          if (!inp || typeof inp.value !== "string") continue;
+          const trimmedValue = inp.value.trim();
+          if (!trimmedValue) continue;
+
+          const lowerKey = trimmedValue.toLowerCase();
+          let resolved: ProductAttributeOption | undefined = bucket.get(lowerKey);
+
+          if (!resolved && typeof inp.optionId === "number") {
+            const byId = await optionRepository.findOne({
+              where: { id: inp.optionId },
+            });
+            if (byId && byId.attributeId === attributeId) {
+              resolved = byId;
+            }
+          }
+
+          if (resolved) {
+            // Update mutable fields, keep id. sortOrder: explicit wins, else index.
+            resolved.sortOrder =
+              typeof inp.sortOrder === "number" ? inp.sortOrder : i;
+            if (inp.isActive !== undefined) resolved.isActive = inp.isActive;
+            if (inp.isCustomTrigger !== undefined) {
+              resolved.isCustomTrigger = inp.isCustomTrigger;
+            }
+            if (inp.customPlaceholder !== undefined) {
+              resolved.customPlaceholder = inp.customPlaceholder;
+            }
+            const saved = await optionRepository.save(resolved);
+            bucket.set(lowerKey, saved);
+          } else {
+            const created = await optionRepository.save(
+              optionRepository.create({
+                attributeId,
+                value: trimmedValue,
+                sortOrder: typeof inp.sortOrder === "number" ? inp.sortOrder : i,
+                isActive: inp.isActive ?? true,
+                isCustomTrigger: inp.isCustomTrigger ?? false,
+                customPlaceholder: inp.customPlaceholder ?? null,
+              }),
+            );
+            bucket.set(lowerKey, created);
+          }
+        }
+
+        optionByAttributeAndValue.set(attributeId, bucket);
+      }
+    }
+
     const mappingsToSave: ProductAttributeMapping[] = [];
     for (const resolvedMapping of resolvedMappings) {
       const mappingInput = resolvedMapping.input;
@@ -1132,6 +1245,24 @@ export class ProductsService {
           );
           optionsById.set(createdOption.id, createdOption);
           resolvedDefaultOptionId = createdOption.id;
+        }
+      }
+
+      // If FE sent `options` but no explicit default, promote the first option
+      // to default so the inquiry form has a preselected value.
+      if (
+        resolvedDefaultOptionId === null &&
+        mappingInput.options?.length &&
+        mappingInput.defaultOptionValue === undefined &&
+        mappingInput.defaultOptionId === undefined
+      ) {
+        const bucket = optionByAttributeAndValue.get(resolvedMapping.attributeId);
+        const firstNew = mappingInput.options
+          .map((o) => o?.value?.trim().toLowerCase())
+          .filter((v): v is string => Boolean(v))[0];
+        const candidate = firstNew ? bucket?.get(firstNew) : undefined;
+        if (candidate) {
+          resolvedDefaultOptionId = candidate.id;
         }
       }
 
@@ -1681,7 +1812,7 @@ export class ProductsService {
       const savedApp = await appRepository.save(app);
 
       if (appInput.attributes && appInput.attributes.length > 0) {
-        const attrEntries = appInput.attributes.map(
+        savedApp.attributes = appInput.attributes.map(
           (attr: ProductApplicationAttributeInputDto, idx: number) =>
             attrRepository.create({
               productApplicationId: savedApp.id,
@@ -1690,7 +1821,7 @@ export class ProductsService {
               sortOrder: attr.sortOrder ?? idx,
             }),
         );
-        await attrRepository.save(attrEntries);
+        await appRepository.save(savedApp);
       }
     }
   }
@@ -1851,11 +1982,22 @@ export class ProductsService {
     productId: string,
     input: CreateProductDto | UpdateProductDto,
   ): Promise<void> {
-    await this.syncAttributeValues(manager, productId, input);
-    await this.syncAttributeMappings(manager, productId, input);
-    await this.syncContainerConfigs(manager, productId, input);
-    await this.syncCountryConfigs(manager, productId, input);
-    await this.syncImages(manager, productId, input);
+  // Auto-derive containerConfigs and quoteConfig.moq from attributeValues
+  // when FE doesn't send them explicitly. Keeps display (attributeValues) and
+  // auto-calc (containerConfigs + quoteConfig.moq) in sync without forcing
+  // staff to fill 2 places.
+  this.deriveContainerAndMoqFromAttributes(input);
+
+  // Auto-fill missing `key` on each quoteConfig.field from its `label`.
+  // Lets FE send `fields` without a `key`; server guarantees a stable,
+  // unique, camelCase, ASCII key per field. Preserves explicit keys.
+  this.assignGeneratedQuoteFieldKeys(input);
+
+  await this.syncAttributeValues(manager, productId, input);
+  await this.syncAttributeMappings(manager, productId, input);
+  await this.syncContainerConfigs(manager, productId, input);
+  await this.syncCountryConfigs(manager, productId, input);
+  await this.syncImages(manager, productId, input);
     await this.syncTechnicalSpecifications(manager, productId, input);
     await this.syncPackagingOptions(manager, productId, input);
     await this.syncTargetBuyers(manager, productId, input);
@@ -1864,6 +2006,240 @@ export class ProductsService {
     await this.syncFaqs(manager, productId, input);
     await this.syncCertificates(manager, productId, input);
     await this.syncApplications(manager, productId, input);
+  }
+
+  /**
+   * Auto-derive functional config (containerConfigs + quoteConfig.moq) from
+   * display attributes so the two sources stay in sync.
+   *
+   * Reads three well-known attribute codes from `attributeValues`:
+   *   • `container_load`  — e.g. "~27 tonnes per 40ft container" or
+   *                          "~27 MT per 40HQ"
+   *   • `container_type`  — e.g. "40ft refrigerated (reefer)"
+   *   • `moq`             — e.g. "1 x 40ft containers" or "1 x 40RF"
+   *
+   * Side effects (mutates `input` in place, only when FE did NOT send the
+   * corresponding field, so explicit values always win):
+   *   1. `containerConfigs` is populated from `container_load`+
+   *      `container_type`.
+   *   2. `quoteConfig.moq` is normalized into the parser-friendly form
+   *      `"<N> x <CODE>"` expected by `resolveMoqMt()`.
+   */
+  private deriveContainerAndMoqFromAttributes(
+    input: CreateProductDto | UpdateProductDto,
+  ): void {
+    const configInput = input as ProductConfigPayload;
+    const attrs = configInput.attributeValues;
+    if (!attrs?.length) return;
+
+    const findByCode = (code: string): string | null => {
+      const hit = attrs.find(
+        (item) => item.attributeCode?.trim().toLowerCase() === code,
+      );
+      if (!hit?.value) return null;
+      const trimmed = hit.value.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    };
+
+    const containerLoad = findByCode("container_load");
+    const containerType = findByCode("container_type");
+    const moqValue = findByCode("moq");
+
+    // ── 1) Derive containerConfigs if FE didn't send it ───────────────────
+    if (!configInput.containerConfigs && containerLoad) {
+      const capacity = this.extractCapacityMt(containerLoad);
+      if (capacity !== null) {
+        const typeText =
+          containerType ?? this.extractContainerTypeAfterPer(containerLoad);
+        const containerCode = this.deriveContainerCode(
+          typeText ?? containerLoad,
+        );
+
+        if (containerCode) {
+          configInput.containerConfigs = [
+            {
+              containerCode,
+              containerName:
+                typeText?.trim() ||
+                `${capacity} MT container`,
+              capacityMt: capacity,
+              isDefault: true,
+            },
+          ];
+        }
+      }
+    }
+
+    // ── 2) Derive quoteConfig.moq if FE didn't send it ─────────────────────
+    if (moqValue && !configInput.quoteConfig?.moq) {
+      const parsed = this.parseMoqString(moqValue);
+      const containerCode =
+        configInput.containerConfigs?.[0]?.containerCode ??
+        this.deriveContainerCode(moqValue);
+
+      let moqLabel: string | null = null;
+      if (parsed && containerCode) {
+        moqLabel = `${parsed.count} x ${containerCode}`;
+      } else if (parsed) {
+        // No container code resolved — keep original wording
+        moqLabel = moqValue;
+      } else {
+        moqLabel = moqValue;
+      }
+
+      if (!configInput.quoteConfig) {
+        configInput.quoteConfig = { moq: moqLabel };
+      } else {
+        configInput.quoteConfig.moq = moqLabel;
+      }
+    }
+  }
+
+  /**
+   * Convert a human label (e.g. "Destination Port") into a stable, URL-friendly
+   * key suitable for use as a JSON property name and an attributeCode.
+   *
+   *   "Destination Port" → "destinationPort"
+   *   "Quantity (MT)"     → "quantityMt"
+   *   "Packing - Inner"   → "packingInner"
+   *   "" / non-ASCII      → "field"   (fallback)
+   *
+   * Result is camelCase, lowercase-first, ASCII-only, and ≤ 80 chars.
+   */
+  private slugifyFieldLabel(label: string | null | undefined): string {
+    const ascii = String(label ?? "")
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "") // strip diacritics
+      .replace(/[^a-zA-Z0-9]+/g, " ") // non-alphanumerics → spaces
+      .trim();
+
+    if (!ascii) {
+      return "field";
+    }
+
+    const words = ascii.split(/\s+/).filter(Boolean);
+    const camel = words
+      .map((w, i) =>
+        i === 0
+          ? w.toLowerCase()
+          : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(),
+      )
+      .join("");
+
+    const safe = camel || "field";
+    return safe.slice(0, 80);
+  }
+
+  /**
+   * Fill in any missing `key` on each field based on the field's `label`.
+   * Preserves explicit client-provided keys. Disambiguates duplicates by
+   * suffixing the first occurrence with no suffix, the second with "2", etc.
+   * Pure: returns a new array, never mutates input.
+   */
+  private assignGeneratedFieldKeys<
+    T extends { key?: string | null; label?: string | null },
+  >(fields: T[]): T[] {
+    const used = new Set<string>();
+    return fields.map((f) => {
+      const existing = (f.key ?? "").toString().trim();
+      if (existing) {
+        used.add(existing);
+        return f;
+      }
+
+      const base = this.slugifyFieldLabel(f.label);
+      let candidate = base;
+      let n = 2;
+      while (used.has(candidate)) {
+        candidate = `${base}${n}`;
+        n += 1;
+      }
+      used.add(candidate);
+      return { ...f, key: candidate };
+    });
+  }
+
+  /**
+   * Mutates `input.quoteConfig.fields` in place so every field has a non-empty
+   * unique `key`. Called before sync runs so attributeMappings (which use
+   * `field.key` as `attributeCode`) always see a valid identifier.
+   */
+  private assignGeneratedQuoteFieldKeys(
+    input: CreateProductDto | UpdateProductDto,
+  ): void {
+    const configInput = input as ProductConfigPayload;
+    if (!configInput.quoteConfig?.fields?.length) return;
+
+    configInput.quoteConfig.fields = this.assignGeneratedFieldKeys(
+      configInput.quoteConfig.fields,
+    ) as NonNullable<
+      NonNullable<ProductConfigPayload["quoteConfig"]>["fields"]
+    >;
+  }
+
+  /**
+   * Pull the first numeric value followed by tonnes/tấn/MT/ton.
+   * Examples it matches:
+   *   "~27 tonnes per 40ft container" → 27
+   *   "~27 MT per 40HQ"               → 27
+   *   "≈ 27.5 tonnes"                  → 27.5
+   */
+  private extractCapacityMt(text: string): number | null {
+    const match = text.match(
+      /(\d+(?:\.\d+)?)\s*(?:tonnes?|tấn|\bmt\b|tons?)/i,
+    );
+    if (!match) return null;
+    const value = parseFloat(match[1]);
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }
+
+  /**
+   * Extract container type hint from text after "per" or "/".
+   * Example: "~27 tonnes per 40ft container" → "40ft container".
+   */
+  private extractContainerTypeAfterPer(text: string): string | null {
+    const match = text.match(/(?:per|\/)\s*(.+)$/i);
+    return match ? match[1].trim() : null;
+  }
+
+  /**
+   * Try to map free-form container description to a canonical ISO-like code
+   * (e.g. "40ft refrigerated", "40RF", "40ft reefer", "40HQ").
+   * Returns null if no recognizable code is found.
+   */
+  private deriveContainerCode(text: string | null | undefined): string | null {
+    if (!text) return null;
+    const upper = text.toUpperCase();
+
+    const isoMatch = upper.match(
+      /\b((?:20|40|45)\s*(?:FT|RF|HQ|RH|RE|DV|DC|DRY|REEFER|HIGH|OT))\b/,
+    );
+    if (isoMatch) {
+      return isoMatch[1].replace(/\s+/g, "");
+    }
+
+    // Plain "40ft" / "20ft" → pad to 4 chars: 40FT / 20FT
+    const plainMatch = upper.match(/\b((?:20|40|45)\s*FT)\b/);
+    if (plainMatch) return plainMatch[1].replace(/\s+/g, "");
+
+    return null;
+  }
+
+  /**
+   * Parse MOQ strings into (count, raw) when possible.
+   * Examples:
+   *   "1 x 40ft containers"     → { count: 1, raw: "1 x 40ft containers" }
+   *   "2 x 20FT"                → { count: 2, raw: "2 x 20FT" }
+   *   "5 containers"            → null (no "N x CODE" pattern)
+   */
+  private parseMoqString(
+    text: string,
+  ): { count: number; raw: string } | null {
+    const match = text.match(/^\s*(\d+(?:\.\d+)?)\s*[xX×]\s*([A-Za-z0-9 ]+?)\s*$/);
+    if (!match) return null;
+    const count = parseFloat(match[1]);
+    if (!Number.isFinite(count) || count <= 0) return null;
+    return { count, raw: text.trim() };
   }
 
   async softDeleteProduct(id: string): Promise<ProductDetailDto> {
@@ -1949,31 +2325,27 @@ export class ProductsService {
     createProductDto: CreateProductDto,
   ): Promise<ProductDetailDto> {
     try {
-      return await this.productsRepository.manager.transaction(
+      const savedProduct = await this.productsRepository.manager.transaction(
         async (manager) => {
           const productRepository = manager.getRepository(Product);
           const product = productRepository.create(
             await this.buildProductPayload(createProductDto),
           );
-
-          const savedProduct = await productRepository.save(product);
+          const saved = await productRepository.save(product);
           await this.syncProductConfigurations(
             manager,
-            savedProduct.id,
+            saved.id,
             createProductDto,
           );
-          const detailProduct = await this.loadProductForDetail(
-            savedProduct.id,
-            manager,
-          );
-          return this.toDetailDto(detailProduct);
+          return saved;
         },
       );
+      const detailProduct = await this.loadProductForDetail(savedProduct.id);
+      return this.toDetailDto(detailProduct);
     } catch (error) {
       if (this.isUniqueConstraintError(error)) {
         throw new ConflictException("Product slug already exists");
       }
-
       throw error;
     }
   }
@@ -1983,7 +2355,7 @@ export class ProductsService {
     updateProductDto: UpdateProductDto,
   ): Promise<ProductDetailDto> {
     try {
-      return await this.productsRepository.manager.transaction(
+      const savedProduct = await this.productsRepository.manager.transaction(
         async (manager) => {
           const productRepository = manager.getRepository(Product);
           const product = await productRepository.findOne({ where: { id } });
@@ -1997,19 +2369,17 @@ export class ProductsService {
             await this.buildProductPayload(updateProductDto, product),
           );
 
-          const savedProduct = await productRepository.save(updatedProduct);
+          const saved = await productRepository.save(updatedProduct);
           await this.syncProductConfigurations(
             manager,
-            savedProduct.id,
+            saved.id,
             updateProductDto,
           );
-          const detailProduct = await this.loadProductForDetail(
-            savedProduct.id,
-            manager,
-          );
-          return this.toDetailDto(detailProduct);
+          return saved;
         },
       );
+      const detailProduct = await this.loadProductForDetail(savedProduct.id);
+      return this.toDetailDto(detailProduct);
     } catch (error) {
       if (this.isUniqueConstraintError(error)) {
         throw new ConflictException("Product slug already exists");
@@ -2153,44 +2523,6 @@ export class ProductsService {
   }
 
   private toOrderConfigDto(product: Product): ProductOrderConfigDto {
-    // Public-facing endpoint — hide attributes that staff marked as
-    // isInquiryField=false (catalog-only, e.g. internal SKUs / spec notes).
-    const mappings: InquiryOrderAttributeMappingDto[] = (
-      product.attributeMappings ?? []
-    )
-      .filter((mapping) => mapping.isInquiryField !== false)
-      .slice()
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((mapping): InquiryOrderAttributeMappingDto => ({
-        id: mapping.id,
-        attributeId: mapping.attributeId,
-        code: mapping.attribute?.code ?? "",
-        name: mapping.attribute?.name ?? "",
-        groupKey: mapping.attribute?.groupKey ?? "other",
-        type: mapping.attribute?.type ?? "text",
-        unit: mapping.attribute?.unit ?? null,
-        defaultValue: mapping.attribute?.defaultValue ?? null,
-        placeholder: mapping.attribute?.placeholder ?? null,
-        footnote: mapping.attribute?.footnote ?? null,
-        required: mapping.required,
-        isInquiryField: mapping.isInquiryField,
-        sortOrder: mapping.sortOrder,
-        defaultOptionId: mapping.defaultOptionId ?? null,
-        options: (mapping.attribute?.options ?? [])
-          .slice()
-          .sort((a, b) => a.sortOrder - b.sortOrder)
-          .map(
-            (option): InquiryOrderAttributeOptionDto => ({
-              id: option.id,
-              value: option.value,
-              sortOrder: option.sortOrder,
-              isActive: option.isActive,
-              isCustomTrigger: option.isCustomTrigger ?? false,
-              customPlaceholder: option.customPlaceholder ?? null,
-            }),
-          ),
-      }));
-
     const containers: InquiryOrderContainerConfigDto[] = (
       product.containerConfigs ?? []
     )
@@ -2237,10 +2569,10 @@ export class ProductsService {
       productName: product.name,
       productSlug: product.slug,
       productCode: product.productCode ?? null,
-      attributeMappings: mappings,
       containerConfigs: containers,
       countryConfigs: countries,
       tradeTerms,
+      quoteConfig: this.toQuoteConfig(product),
     };
   }
 

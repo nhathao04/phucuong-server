@@ -341,6 +341,28 @@ export class ProductCertificateSummaryDto {
   fileUrl!: string | null;
 }
 
+export class ProductQuoteConfigFieldOptionDto {
+  @ApiProperty({ example: "Medium" })
+  value!: string;
+
+  @ApiProperty({ example: "Medium" })
+  label?: string;
+
+  @ApiProperty({ example: true })
+  isActive?: boolean;
+
+  @ApiProperty({ example: 0 })
+  sortOrder?: number;
+
+  @ApiProperty({ example: false })
+  isCustomTrigger?: boolean;
+
+  @ApiPropertyOptional({
+    example: "Describe your preferred option",
+  })
+  customPlaceholder?: string | null;
+}
+
 export class ProductQuoteConfigFieldDto {
   @ApiProperty({ example: "quantity" })
   key!: string;
@@ -357,11 +379,15 @@ export class ProductQuoteConfigFieldDto {
   @ApiProperty({ example: true })
   required!: boolean;
 
+  @ApiPropertyOptional({ example: 0 })
+  sortOrder?: number;
+
   @ApiPropertyOptional({
-    type: "array",
-    items: { type: "object" },
+    type: ProductQuoteConfigFieldOptionDto,
+    isArray: true,
   })
-  options!: Array<{ value: string; label: string }>;
+  @Type(() => ProductQuoteConfigFieldOptionDto)
+  options?: ProductQuoteConfigFieldOptionDto[];
 }
 
 export class ProductQuoteConfigDto {
@@ -585,92 +611,6 @@ export class ProductListResponseDto {
 // Returned by GET /products/:identifier/order-config and the staff equivalent.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export class InquiryOrderAttributeOptionDto {
-  @ApiProperty({ example: 34 })
-  id!: number;
-
-  @ApiProperty({ example: "Medium" })
-  value!: string;
-
-  @ApiProperty({ example: 0 })
-  sortOrder!: number;
-
-  @ApiProperty({ example: true })
-  isActive!: boolean;
-
-  @ApiProperty({
-    example: false,
-    description:
-      "When true, picking this option reveals a free-form input on the FE — the buyer types their own value (sent to server as customValue alongside optionId).",
-  })
-  isCustomTrigger!: boolean;
-
-  @ApiPropertyOptional({
-    example: "Describe your preferred size (e.g. 14 cm)",
-    description: "Placeholder text shown in the free-form input next to the Custom option.",
-  })
-  customPlaceholder!: string | null;
-}
-
-export class InquiryOrderAttributeMappingDto {
-  @ApiProperty({ example: 1 })
-  id!: number;
-
-  @ApiProperty({ example: 12 })
-  attributeId!: number;
-
-  @ApiProperty({ example: "coconut_size" })
-  code!: string;
-
-  @ApiProperty({ example: "Coconut Size" })
-  name!: string;
-
-  @ApiProperty({
-    enum: ProductAttributeGroup,
-    description:
-      "Use groupKey to group mappings into 'specifications' / 'packing' / etc. on the inquiry form.",
-  })
-  groupKey!: ProductAttributeGroup;
-
-  @ApiProperty({ enum: ProductAttributeType })
-  type!: ProductAttributeType;
-
-  @ApiPropertyOptional({ example: "cm" })
-  unit!: string | null;
-
-  @ApiPropertyOptional({ example: "Medium" })
-  defaultValue!: string | null;
-
-  @ApiPropertyOptional({ example: "Choose size" })
-  placeholder!: string | null;
-
-  @ApiPropertyOptional()
-  footnote!: string | null;
-
-  @ApiProperty({ example: true })
-  required!: boolean;
-
-  @ApiProperty({
-    example: true,
-    description:
-      "When false, this attribute is hidden from the inquiry form (used only for catalog/listing). When true, FE renders the field in Step 2.",
-  })
-  isInquiryField!: boolean;
-
-  @ApiProperty({ example: 0 })
-  sortOrder!: number;
-
-  @ApiPropertyOptional({ example: 34 })
-  defaultOptionId!: number | null;
-
-  @ApiProperty({
-    type: [InquiryOrderAttributeOptionDto],
-    description: "All available options (for select-type attributes).",
-  })
-  @Type(() => InquiryOrderAttributeOptionDto)
-  options!: InquiryOrderAttributeOptionDto[];
-}
-
 export class InquiryOrderContainerConfigDto {
   @ApiProperty({ example: 1 })
   id!: number;
@@ -742,13 +682,6 @@ export class ProductOrderConfigDto {
   productCode!: string | null;
 
   @ApiProperty({
-    type: [InquiryOrderAttributeMappingDto],
-    description:
-      "Product-specific order attributes with full option lists. FE renders them in Step 2 grouped by groupKey.",
-  })
-  attributeMappings!: InquiryOrderAttributeMappingDto[];
-
-  @ApiProperty({
     type: [InquiryOrderContainerConfigDto],
     description: "Container capacities used by the Container Qty auto-calculator.",
   })
@@ -766,4 +699,15 @@ export class ProductOrderConfigDto {
     description: "Trade terms selectable in Step 3 (FOB / CNF / CIF …).",
   })
   tradeTerms!: InquiryOrderTradeTermDto[];
+
+  @ApiProperty({
+    type: ProductQuoteConfigDto,
+    nullable: true,
+    description:
+      "Inquiry form schema (MOQ + tradeTerms + fields with options). " +
+      "Mirrors `detail.quoteConfig` so FE can render Step 2 directly " +
+      "without needing to call the full detail endpoint.",
+  })
+  @Type(() => ProductQuoteConfigDto)
+  quoteConfig!: ProductQuoteConfigDto | null;
 }

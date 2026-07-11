@@ -26,6 +26,7 @@ import { StaffRoleGuard } from "../../common/guards/staff-role.guard";
 import {
   CreateProductDto,
   CREATE_PRODUCT_SWAGGER_EXAMPLE,
+  CREATE_PRODUCT_AUTO_DERIVE_SWAGGER_EXAMPLE,
   UPDATE_PRODUCT_PARTIAL_SWAGGER_EXAMPLE,
   UPDATE_PRODUCT_REPLACE_CONFIGS_SWAGGER_EXAMPLE,
   UpdateProductDto,
@@ -64,15 +65,29 @@ export class ProductsController {
   }
 
   @Post()
-  @ApiOperation({ summary: "Create product for staff" })
+  @ApiOperation({
+    summary: "Create product for staff",
+    description:
+      "Create product core data and optional normalized configurations.\n\n" +
+      "**Auto-derivation (since feature)**: if you send `attributeValues` with codes " +
+      "`container_load` + `container_type`, the server auto-creates `containerConfigs`. " +
+      "If you send `attributeValues` with code `moq`, the server auto-fills `quoteConfig.moq` " +
+      "in the parser-friendly form `<N> x <CODE>`. Explicit `containerConfigs` and `quoteConfig.moq` always win.",
+  })
   @ApiBody({
     type: CreateProductDto,
     description:
-      "Create product core data and optional normalized configurations (attributeMappings, containerConfigs, tradeTerms).",
+      "Two patterns are supported. Pattern A: send everything explicitly (recommended for complex SKUs). " +
+      "Pattern B: send only `attributeValues` and rely on auto-derivation for `containerConfigs` + `quoteConfig.moq`.",
     examples: {
-      default: {
-        summary: "Create product with full configuration",
+      full: {
+        summary: "Pattern A — explicit containerConfigs + quoteConfig.moq",
         value: CREATE_PRODUCT_SWAGGER_EXAMPLE,
+      },
+      autoDerive: {
+        summary:
+          "Pattern B — only attributeValues (container load + MOQ auto-derived)",
+        value: CREATE_PRODUCT_AUTO_DERIVE_SWAGGER_EXAMPLE,
       },
     },
   })
@@ -100,7 +115,10 @@ export class ProductsController {
   @ApiBody({
     type: UpdateProductDto,
     description:
-      "Update product core data and optionally replace normalized configurations. Sending config arrays replaces existing records; sending empty arrays clears them.",
+      "Update product core data and optionally replace normalized configurations. Sending config arrays replaces existing records; sending empty arrays clears them.\n\n" +
+      "**Auto-derivation** applies the same as POST: if `attributeValues` contains codes " +
+      "`container_load`/`container_type`/`moq` and the corresponding `containerConfigs`/`quoteConfig.moq` " +
+      "are omitted, the server derives them automatically. Explicit values always win.",
     examples: {
       replaceConfigs: {
         summary: "Replace attribute/container/trade-term configurations",
