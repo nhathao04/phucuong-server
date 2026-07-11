@@ -704,30 +704,20 @@ export class InquiriesAdminService {
   async getStats(daysWindow = 30): Promise<InquiryStatsDto> {
     const since = new Date(Date.now() - daysWindow * 24 * 60 * 60 * 1000);
 
-    const [
-      totals,
-      byStep,
-      daySeries,
-      topCountries,
-      topProducts,
-      staffPerf,
-      emails,
-      emailsPending,
-    ] = await Promise.all([
-      this.countTotals(),
-      this.buildFunnel(),
-      this.buildDaySeries(since),
-      this.buildTopCountries(10),
-      this.buildTopProducts(10),
-      this.buildStaffPerformance(10),
-      this.countEmails(),
-      Promise.all([
-        this.emailOutboxRepo.count({ where: { status: EmailOutboxStatus.PENDING } }),
-        this.emailOutboxRepo.count({ where: { status: EmailOutboxStatus.FAILED } }),
-      ]),
-    ]);
+    const totals = await this.countTotals();
+    const byStep = await this.buildFunnel();
+    const daySeries = await this.buildDaySeries(since);
+    const topCountries = await this.buildTopCountries(10);
+    const topProducts = await this.buildTopProducts(10);
+    const staffPerf = await this.buildStaffPerformance(10);
+    const emails = await this.countEmails();
+    const pendingOutbox = await this.emailOutboxRepo.count({
+      where: { status: EmailOutboxStatus.PENDING },
+    });
+    const failedOutbox = await this.emailOutboxRepo.count({
+      where: { status: EmailOutboxStatus.FAILED },
+    });
 
-    const [pendingOutbox, failedOutbox] = emailsPending;
 
     return {
       counts: totals,

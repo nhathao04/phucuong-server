@@ -598,80 +598,77 @@ export class ProductsService {
 
     const mgr = repo.manager;
     const productId = product.id;
-    const [
-      countryConfigs,
-      attributeMappings,
-      attributeValues,
-      containerConfigs,
-      tradeTerms,
-      faqs,
-      certificates,
-      images,
-      technicalSpecifications,
-      packagingOptions,
-      targetBuyers,
-      whyChooseUs,
-      applications,
-    ] = await Promise.all([
-      mgr.getRepository(ProductCountryConfig).find({
+
+    const countryConfigs = await mgr
+      .getRepository(ProductCountryConfig)
+      .find({
         where: { productId },
         relations: { country: true },
         order: { sortOrder: "ASC" },
-      }),
-      mgr.getRepository(ProductAttributeMapping).find({
+      });
+    const attributeMappings = await mgr
+      .getRepository(ProductAttributeMapping)
+      .find({
         where: { productId },
         relations: { attribute: true, defaultOption: true },
         order: { sortOrder: "ASC" },
-      }),
-      mgr.getRepository(ProductAttributeValue).find({
+      });
+    const attributeValues = await mgr
+      .getRepository(ProductAttributeValue)
+      .find({
         where: { productId },
         relations: { attribute: true },
         order: { sortOrder: "ASC" },
-      }),
-      mgr.getRepository(ProductContainerConfig).find({
+      });
+    const containerConfigs = await mgr
+      .getRepository(ProductContainerConfig)
+      .find({
         where: { productId },
-      }),
-      mgr.getRepository(ProductTradeTerm).find({
-        where: { productId },
-        relations: { tradeTerm: true },
-        order: { sortOrder: "ASC" },
-      }),
-      mgr.getRepository(ProductFaq).find({
-        where: { productId },
-        order: { sortOrder: "ASC" },
-      }),
-      mgr.getRepository(ProductCertificate).find({
-        where: { productId },
-        relations: { certificate: true },
-        order: { sortOrder: "ASC" },
-      }),
-      mgr.getRepository(ProductImage).find({
-        where: { productId },
-        relations: { asset: true },
-        order: { sortOrder: "ASC" },
-      }),
-      mgr.getRepository(ProductTechnicalSpecification).find({
-        where: { productId },
-        order: { sortOrder: "ASC" },
-      }),
-      mgr.getRepository(ProductPackagingOption).find({
-        where: { productId },
-        order: { sortOrder: "ASC" },
-      }),
-      mgr.getRepository(ProductTargetBuyer).find({
+      });
+    const tradeTerms = await mgr.getRepository(ProductTradeTerm).find({
+      where: { productId },
+      relations: { tradeTerm: true },
+      order: { sortOrder: "ASC" },
+    });
+    const faqs = await mgr.getRepository(ProductFaq).find({
+      where: { productId },
+      order: { sortOrder: "ASC" },
+    });
+    const certificates = await mgr.getRepository(ProductCertificate).find({
+      where: { productId },
+      relations: { certificate: true },
+      order: { sortOrder: "ASC" },
+    });
+    const images = await mgr.getRepository(ProductImage).find({
+      where: { productId },
+      relations: { asset: true },
+      order: { sortOrder: "ASC" },
+    });
+    const technicalSpecifications = await mgr
+      .getRepository(ProductTechnicalSpecification)
+      .find({
         where: { productId },
         order: { sortOrder: "ASC" },
-      }),
-      mgr.getRepository(ProductWhyChooseUs).find({
+      });
+    const packagingOptions = await mgr
+      .getRepository(ProductPackagingOption)
+      .find({
         where: { productId },
         order: { sortOrder: "ASC" },
-      }),
-      mgr.getRepository(ProductApplication).find({
-        where: { productId },
-        relations: { attributes: true },
-        order: { sortOrder: "ASC" },
-      }),
-    ]);
+      });
+    const targetBuyers = await mgr.getRepository(ProductTargetBuyer).find({
+      where: { productId },
+      order: { sortOrder: "ASC" },
+    });
+    const whyChooseUs = await mgr.getRepository(ProductWhyChooseUs).find({
+      where: { productId },
+      order: { sortOrder: "ASC" },
+    });
+    const applications = await mgr.getRepository(ProductApplication).find({
+      where: { productId },
+      relations: { attributes: true },
+      order: { sortOrder: "ASC" },
+    });
 
     product.countryConfigs = countryConfigs;
     product.attributeMappings = attributeMappings;
