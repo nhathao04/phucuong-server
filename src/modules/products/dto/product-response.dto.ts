@@ -110,9 +110,6 @@ export class ProductCategorySummaryDto {
   @ApiPropertyOptional({ example: "Coconut-based products for export." })
   description!: string | null;
 
-  @ApiProperty({ example: 0 })
-  sortOrder!: number;
-
   @ApiProperty({ example: true })
   isActive!: boolean;
 
@@ -335,8 +332,8 @@ export class ProductCertificateSummaryDto {
   @ApiProperty({ example: "ISO 9001:2015" })
   name!: string;
 
-  @ApiPropertyOptional({ example: "available" })
-  status!: string | null;
+  @ApiProperty({ example: true })
+  isActive!: boolean;
 
   @ApiPropertyOptional({
     example: "https://cdn.example.com/certificates/iso-9001.pdf",

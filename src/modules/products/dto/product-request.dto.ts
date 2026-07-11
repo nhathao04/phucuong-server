@@ -615,13 +615,13 @@ export class ProductCertificateInputDto {
   name?: string;
 
   @ApiPropertyOptional({
-    description: "Certificate status (e.g. 'active', 'available'). Required when creating by name.",
-    example: "active",
+    description: "Whether the certificate is active. Defaults to true when creating by name.",
+    example: true,
   })
   @IsOptional()
-  @IsString()
-  @MaxLength(60)
-  status?: string | null;
+  @Transform(({ value }) => normalizeBoolean(value))
+  @IsBoolean()
+  isActive?: boolean;
 
   @ApiPropertyOptional({
     description: "Certificate file URL (e.g. Cloudinary PDF). Optional when creating by name.",
