@@ -14,6 +14,7 @@ import { UsersModule } from "./modules/users/users.module";
 import { GeographyModule } from "./modules/geography/geography.module";
 import { MediaModule } from "./modules/media/media.module";
 import { MailModule } from "./modules/mail/mail.module";
+import { DashboardModule } from "./modules/dashboard/dashboard.module";
 import { typeOrmModuleAsyncOptions } from "./database/typeorm.config";
 
 @Module({
@@ -34,6 +35,7 @@ import { typeOrmModuleAsyncOptions } from "./database/typeorm.config";
     QuotesModule,
     BlogsModule,
     GeographyModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],
