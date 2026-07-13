@@ -17,5 +17,6 @@ import { UsersModule } from "../users/users.module";
   ],
   controllers: [DashboardController],
   providers: [DashboardService],
+  
 })
 export class DashboardModule {}
