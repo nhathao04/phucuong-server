@@ -8,9 +8,31 @@ import { InjectRepository } from "@nestjs/typeorm";
 import * as bcrypt from "bcrypt";
 import { QueryFailedError, Repository } from "typeorm";
 import { CreateUserDto } from "./dto/create-user.dto";
-import { CreateStaffDto, UpdateUserDto } from "./dto/user-admin.dto";
+import { CreateStaffDto, UpdateUserDto, UserResponseDto } from "./dto/user-admin.dto";
 import { Role } from "./entities/role.entity";
 import { User } from "./entities/user.entity";
+
+/**
+ * Strip server-only fields (`password`, `*Tokens[]`) from a User row before
+ * handing it to a controller. The entity already has `@Exclude()` on
+ * `password`, but that decorator only fires under `ClassSerializerInterceptor`
+ * — which this app doesn't register globally. Doing it explicitly here keeps
+ * the API surface safe regardless of which interceptor is wired up.
+ */
+const toUserResponseDto = (u: User): UserResponseDto => ({
+  id: u.id,
+  email: u.email,
+  fullName: u.fullName,
+  avatarUrl: u.avatarUrl ?? null,
+  roleId: u.roleId ?? null,
+  role: u.role
+    ? { id: u.role.id, name: u.role.name }
+    : null,
+  isActive: u.isActive,
+  lastLoginAt: u.lastLoginAt ?? null,
+  createdAt: u.createdAt,
+  updatedAt: u.updatedAt,
+});
 
 @Injectable()
 export class UsersService {
@@ -21,7 +43,7 @@ export class UsersService {
     private readonly rolesRepository: Repository<Role>,
   ) {}
 
-  async create(createUserDto: CreateUserDto): Promise<User> {
+  async create(createUserDto: CreateUserDto): Promise<UserResponseDto> {
     const existingUser = await this.findByEmail(createUserDto.email);
     if (existingUser) {
       throw new ConflictException("Email already exists");
@@ -48,16 +70,7 @@ export class UsersService {
 
     try {
       const savedUser = await this.usersRepository.save(user);
-      const createdUser = await this.usersRepository.findOne({
-        where: { id: savedUser.id },
-        relations: ["role"],
-      });
-
-      if (!createdUser) {
-        throw new BadRequestException("Failed to create user");
-      }
-
-      return createdUser;
+      return this.findByIdResponse(savedUser.id);
     } catch (error) {
       if (error instanceof QueryFailedError) {
         const driverError = error.driverError as { code?: string };
@@ -78,11 +91,25 @@ export class UsersService {
     return this.usersRepository.findOne({ where: { id } });
   }
 
-  findByIdWithRole(id: string): Promise<User | null> {
+  async findByIdWithRole(id: string): Promise<User | null> {
     return this.usersRepository.findOne({
       where: { id },
       relations: ["role"],
     });
+  }
+
+  /**
+   * Convenience wrapper for controller-facing callers. Strips server-only
+   * fields (`password`, refresh/reset/email token collections) before
+   * returning. Throws `NotFoundException` if the user is missing so the
+   * controller signature stays tidy.
+   */
+  async findByIdResponse(id: string): Promise<UserResponseDto> {
+    const user = await this.findByIdWithRole(id);
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+    return toUserResponseDto(user);
   }
 
   async findByEmailWithRole(email: string): Promise<User | null> {
@@ -121,7 +148,7 @@ export class UsersService {
   // Admin methods
   // ─────────────────────────────────────────────────────────────────────────────
 
-  async createStaff(dto: CreateStaffDto): Promise<User> {
+  async createStaff(dto: CreateStaffDto): Promise<UserResponseDto> {
     const existingUser = await this.findByEmail(dto.email);
     if (existingUser) {
       throw new ConflictException("Email already exists");
@@ -143,7 +170,7 @@ export class UsersService {
 
     try {
       const savedUser = await this.usersRepository.save(user);
-      return this.findByIdWithRole(savedUser.id) as Promise<User>;
+      return this.findByIdResponse(savedUser.id);
     } catch (error) {
       if (error instanceof QueryFailedError) {
         const driverError = error.driverError as { code?: string };
@@ -161,7 +188,7 @@ export class UsersService {
     search?: string;
     role?: string;
     isActive?: boolean;
-  }): Promise<{ data: User[]; total: number; page: number; limit: number; totalPages: number }> {
+  }): Promise<{ data: UserResponseDto[]; total: number; page: number; limit: number; totalPages: number }> {
     const page = options.page || 1;
     const limit = options.limit || 20;
     const skip = (page - 1) * limit;
@@ -186,10 +213,10 @@ export class UsersService {
       queryBuilder.andWhere("user.isActive = :isActive", { isActive: options.isActive });
     }
 
-    const [data, total] = await queryBuilder.skip(skip).take(limit).getManyAndCount();
+    const [rows, total] = await queryBuilder.skip(skip).take(limit).getManyAndCount();
 
     return {
-      data,
+      data: rows.map(toUserResponseDto),
       total,
       page,
       limit,
@@ -197,7 +224,7 @@ export class UsersService {
     };
   }
 
-  async updateUser(id: string, dto: UpdateUserDto): Promise<User> {
+  async updateUser(id: string, dto: UpdateUserDto): Promise<UserResponseDto> {
     const user = await this.usersRepository.findOne({ where: { id } });
     if (!user) {
       throw new NotFoundException("User not found");
@@ -222,17 +249,17 @@ export class UsersService {
     }
 
     await this.usersRepository.update(id, updateData);
-    return this.findByIdWithRole(id) as Promise<User>;
+    return this.findByIdResponse(id);
   }
 
-  async setUserActive(id: string, isActive: boolean): Promise<User> {
+  async setUserActive(id: string, isActive: boolean): Promise<UserResponseDto> {
     const user = await this.usersRepository.findOne({ where: { id } });
     if (!user) {
       throw new NotFoundException("User not found");
     }
 
     await this.usersRepository.update(id, { isActive });
-    return this.findByIdWithRole(id) as Promise<User>;
+    return this.findByIdResponse(id);
   }
 
   async listRoles(): Promise<Role[]> {

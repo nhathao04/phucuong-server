@@ -40,7 +40,7 @@ export class UsersController {
   @ApiOperation({ summary: "Create a new user" })
   @ApiResponse({ status: 201, type: UserResponseDto })
   create(@Body() createUserDto: CreateUserDto): Promise<UserResponseDto> {
-    return this.usersService.create(createUserDto) as Promise<UserResponseDto>;
+    return this.usersService.create(createUserDto);
   }
 
   @Post("users/roles")
@@ -64,7 +64,7 @@ export class UsersController {
   @ApiOperation({ summary: "Get a user by id" })
   @ApiResponse({ status: 200, type: UserResponseDto })
   findById(@Param("id") id: string): Promise<UserResponseDto> {
-    return this.usersService.findByIdWithRole(id) as Promise<UserResponseDto>;
+    return this.usersService.findByIdResponse(id);
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -107,7 +107,7 @@ export class UsersController {
   @ApiOperation({ summary: "Create staff account (admin)" })
   @ApiResponse({ status: 201, type: UserResponseDto })
   createStaff(@Body() dto: CreateStaffDto): Promise<UserResponseDto> {
-    return this.usersService.createStaff(dto) as Promise<UserResponseDto>;
+    return this.usersService.createStaff(dto);
   }
 
   @Put("admin/users/:id")
@@ -119,7 +119,7 @@ export class UsersController {
     @Param("id") id: string,
     @Body() dto: UpdateUserDto,
   ): Promise<UserResponseDto> {
-    return this.usersService.updateUser(id, dto) as Promise<UserResponseDto>;
+    return this.usersService.updateUser(id, dto);
   }
 
   @Put("admin/users/:id/activate")
@@ -131,6 +131,6 @@ export class UsersController {
     @Param("id") id: string,
     @Body() dto: ActivateUserDto,
   ): Promise<UserResponseDto> {
-    return this.usersService.setUserActive(id, dto.isActive) as Promise<UserResponseDto>;
+    return this.usersService.setUserActive(id, dto.isActive);
   }
 }
