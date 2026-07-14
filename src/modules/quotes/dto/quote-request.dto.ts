@@ -30,10 +30,61 @@ const emptyToUndefined = ({ value }: { value: unknown }) => {
   return v === "" ? undefined : v;
 };
 
-const normalizeSource = ({ value }: { value: unknown }) => {
-  const out = emptyToUndefined({ value });
-  if (typeof out !== "string") return out;
-  return out.toLowerCase();
+/**
+ * Coerce an incoming `tradeTermId` value into a positive integer.
+ *
+ * Frontends sometimes send numeric IDs as JSON strings (e.g. `"1"`,
+ * form-encoded, query-string derivations). `class-transformer` runs
+ * `@Transform` BEFORE `@IsInt`, so we accept number / numeric string here
+ * and reject anything else via the validator chain.
+ *
+ *   - number  → passed through (NaN-safe via Number.isFinite)
+ *   - "123"   → 123 (parsed with parseInt radix 10)
+ *   - "  3 "  → 3
+ *   - "abc"   → NaN → validator will reject
+ *   - null/undefined → undefined (lets @IsOptional fire)
+ *   - ""      → undefined (whitespace was already trimmed by emptyToUndefined,
+ *               so the empty-string branch is unreachable here but kept for
+ *               safety)
+ */
+const coerceTradeTermIdToInt = ({ value }: { value: unknown }): number | undefined => {
+  if (value === undefined || value === null) return undefined;
+
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed === "") return undefined;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  return undefined;
+};
+
+/**
+ * FE has historically sent `productSource` under several labels even though
+ * the BE only recognises two semantic variants:
+ *
+ *   - "catalog" → customer picked a real product from the FE dropdown
+ *   - "others"  → customer typed a free-text product name (anything not in
+ *                 the catalog; includes "Custom", "Not listed", etc.)
+ *
+ * FE-observed aliases we currently accept and map to the canonical value:
+ *
+ *   "custom"     → "others"   (early FE built with a Custom-card option)
+ *
+ * Anything else still trips `@IsIn` so we don't silently accept garbage.
+ */
+const normalizeProductSource = ({ value }: { value: unknown }): unknown => {
+  const trimmed = emptyToUndefined({ value });
+  if (trimmed === undefined) return undefined;
+  if (typeof trimmed !== "string") return trimmed;
+  const lower = trimmed.toLowerCase();
+  if (lower === "custom") return ProductSource.OTHERS;
+  return lower;
 };
 
 export class CreateQuoteDto {
@@ -82,17 +133,21 @@ export class CreateQuoteDto {
   // `productId`:
   //   - productId present (non-empty) → "catalog"
   //   - productId absent / empty      → "others"
+  // FE has historically sent `productSource` as "custom" even though the
+  // BE canonical set is {catalog, others}. The DTO transformer accepts the
+  // legacy alias so older FEs don't get 400'd.
   @ApiProperty({
     example: ProductSource.CATALOG,
-    enum: ProductSource,
+    enum: Object.values(ProductSource),
     required: false,
     description:
       "Where the product comes from. Use 'catalog' for an existing productId, " +
-      "'others' for a custom/free-text product request. Case-insensitive. " +
-      "Optional — inferred from productId when omitted.",
+      "'others' for a custom/free-text product request. The legacy alias " +
+      "'custom' is also accepted and treated as 'others'. " +
+      "Case-insensitive. Optional — inferred from productId when omitted.",
   })
   @IsOptional()
-  @Transform(normalizeSource)
+  @Transform(normalizeProductSource)
   @IsIn(Object.values(ProductSource), {
     message: `productSource must be one of: ${Object.values(ProductSource).join(", ")}`,
   })
@@ -138,7 +193,7 @@ export class CreateQuoteDto {
       "FK to a TradeTerm row (FOB, CIF, EXW, …). Send this when the customer picked an option from the FE dropdown.",
   })
   @IsOptional()
-  @Transform(emptyToUndefined)
+  @Transform(coerceTradeTermIdToInt)
   @IsInt()
   @Min(1)
   tradeTermId?: number;
