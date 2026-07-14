@@ -631,6 +631,18 @@ export class InquiriesAdminService {
       );
     }
 
+    // Authorization: only the staff currently assigned to this inquiry may
+    // mark it as contacted. Otherwise any staff holding an assignment could
+    // "claim credit" by toggling another colleague's inquiry — that's not
+    // allowed, even between two admin users. Mirrors the `unassignStaff`
+    // rule (self-only, no admin override).
+    if (currentOwner.staffUserId !== actor.sub) {
+      throw new ForbiddenException(
+        `Only ${currentOwner.fullName ?? currentOwner.staffUserId} can mark this inquiry as contacted. ` +
+          "Ask the current holder to update the status.",
+      );
+    }
+
     if (inquiry.contactStatus !== InquiryContactStatus.CONTACTED) {
       inquiry.contactStatus = InquiryContactStatus.CONTACTED;
       inquiry.contactedAt = new Date();
@@ -653,6 +665,13 @@ export class InquiriesAdminService {
   /**
    * Roll back CONTACTED → ASSIGNED. Use when staff accidentally marked
    * the inquiry as contacted and wants to undo.
+   *
+   * Same ownership rule as `markContacted`: only the currently assigned
+   * staff can unmark. We re-check ownership (rather than trusting
+   * `contactedById`) because the assignment may have rotated since the
+   * mark — in that case today's owner is the one rolling back, which
+   * matches the mental model "the contact credit belongs to whoever
+   * currently owns the row".
    */
   async unmarkContacted(
     id: string,
@@ -663,6 +682,14 @@ export class InquiriesAdminService {
 
     if (inquiry.contactStatus === InquiryContactStatus.CONTACTED) {
       const currentOwner = await this.getCurrentOwner(id);
+
+      // Same self-only authorization as markContacted.
+      if (currentOwner && currentOwner.staffUserId !== actor.sub) {
+        throw new ForbiddenException(
+          `Only ${currentOwner.fullName ?? currentOwner.staffUserId} can unmark this inquiry's contacted status.`,
+        );
+      }
+
       inquiry.contactStatus = this.deriveContactStatus(
         currentOwner?.staffUserId ?? null,
         InquiryContactStatus.ASSIGNED,
