@@ -1,6 +1,3 @@
-import { readFileSync, existsSync } from "node:fs";
-import { join, dirname } from "node:path";
-
 export interface InquiryCalculationEmailData {
   estimatedContainers?: number | null;
   containerCode?: string | null;
@@ -31,106 +28,64 @@ export interface EmailTemplateData {
   [key: string]: unknown;
 }
 
-// ── Brand tokens (matching Phucuong Export logo) ─────────────────────────────
+// ── Brand tokens (mirrored from web CSS variables) ───────────────────────
+//
+// Tokens mirror the web app's :root CSS variables so customer-facing mail
+// and admin UI share the same identity. Derive soft/border/shadow from the
+// primary so the palette stays in lockstep if the brand color is tweaked.
+//
+//   --brand         #d71920   primary actions, header, links
+//   --brand-hover   #b9141b   hover, gradient end, pressed state
+//   --brand-soft    #fff1f2   info-card / status-badge background
+//   --brand-muted   #fff7f7   page / outer-wrapper background
+//   --ink           #111827   body text, headings
+//   --ink-soft      #374151   muted labels
+//   --surface       #f8f9fb   (reserved for subtle panels)
+//   --surface-raised #ffffff  card background
+//   --line          #e5e7eb   dividers, borders
 export const BRAND = {
-  green: "#3E8E3E", // primary green from logo circle
-  greenDark: "#2E6B2E", // darker green for footer/borders
-  greenSoft: "#E8F5E8", // card background
-  greenBorder: "#C5E0C5", // soft border
-  yellow: "#F5C518", // accent yellow from logo
-  yellowDark: "#D9A913",
-  text: "#1A1A2E",
-  textMuted: "#666666",
-  textLight: "#888888",
-  bg: "#F4F6F8",
-  cardBg: "#FFFFFF",
-  footerBg: "#FAFAFA",
-  divider: "#E8EDF2",
-  white: "#FFFFFF",
-  shadow: "rgba(46, 107, 46, 0.08)",
-  logoUrl:
-    (process.env.PUBLIC_BASE_URL ?? "http://localhost:3000") +
-    "/mail/logo.png",
+  brand: "#d71920", // primary — buttons, header gradient, links, accents
+  brandDark: "#b9141b", // gradient end / pressed
+  brandSoft: "#fff1f2", // info-card bg, status-badge bg
+  brandBorder: "#fbd0d3", // soft border derived from brand
+  accent: "#d71920", // accent strip & section-rule (was yellow, now brand)
+  text: "#111827", // --ink — primary text
+  textMuted: "#374151", // --ink-soft — labels
+  textLight: "#6b7280", // tertiary (between ink-soft and line) for footer links
+  bg: "#fff7f7", // --brand-muted — outer wrapper bg
+  surface: "#f8f9fb", // --surface — reserved for subtle panels
+  cardBg: "#ffffff", // --surface-raised
+  footerBg: "#fff7f7", // footer bg = page bg for cohesion
+  divider: "#e5e7eb", // --line
+  white: "#ffffff",
+  shadow: "rgba(215, 25, 32, 0.10)", // red-tinted shadow to match brand
+  // amber + red reserved for status semantics (MOQ), not branding
+  statusWarn: "#FF8F00", // no-config / pending
+  statusWarnBg: "#FFF8E1",
+  statusWarnBorder: "#FFE082",
+  statusError: "#D32F2F", // below-MOQ
+  statusErrorBg: "#FFEBEE",
 };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Logo embedding — preferred method is base64 (always loads inside email
-// clients, no remote blocking). Falls back to remote URL if env not provided.
-// ─────────────────────────────────────────────────────────────────────────────
-
-let cachedLogoDataUri: string | null = null;
-
-function loadLogoDataUri(): string | null {
-  if (cachedLogoDataUri !== null) return cachedLogoDataUri;
-
-  // 1. Allow override via env (full data URI including the data:image/png;base64, prefix).
-  const envLogo = process.env.MAIL_LOGO_BASE64;
-  if (envLogo && envLogo.trim().length > 0) {
-    cachedLogoDataUri = envLogo.startsWith("data:")
-      ? envLogo
-      : `data:image/png;base64,${envLogo}`;
-    return cachedLogoDataUri;
-  }
-
-  // 2. Otherwise read logo.png from disk. Try several locations so we work
-  //    both in dev (cwd=project root), in production (cwd=dist/src), and
-  //    when running under PM2/systemd where cwd can be anything.
-  //    __dirname-based candidates are the most reliable because they anchor
-  //    to the compiled module's location rather than the process cwd.
-  const candidates = [
-    join(process.cwd(), "public", "mail", "logo.png"),
-    join(process.cwd(), "..", "public", "mail", "logo.png"),
-    join(process.cwd(), "..", "..", "public", "mail", "logo.png"),
-    // Anchored to this module's compiled location (dist/src/modules/mail)
-    // → dist/src/modules/mail/../../../../public/mail/logo.png = public/mail/logo.png
-    join(__dirname, "..", "..", "..", "..", "public", "mail", "logo.png"),
-    join(__dirname, "..", "..", "..", "public", "mail", "logo.png"),
-    join(__dirname, "..", "..", "public", "mail", "logo.png"),
-    // Source-tree fallback (when running via ts-node from src/)
-    join(__dirname, "..", "..", "..", "..", "public", "mail", "logo.png"),
-  ];
-  for (const logoPath of candidates) {
-    try {
-      if (!existsSync(logoPath)) continue;
-      const buf = readFileSync(logoPath);
-      cachedLogoDataUri = `data:image/png;base64,${buf.toString("base64")}`;
-      return cachedLogoDataUri;
-    } catch {
-      // try next
-    }
-  }
-
-  console.warn(
-    "[mail.templates] Could not embed logo.png as data URI from any known path.",
-  );
-  cachedLogoDataUri = "";
-  return null;
-}
-
-// Returns a `<img>` tag for the logo. Width: 72px header / 40px footer.
-// If embedding fails completely we fall back to a styled text wordmark so
-// the brand is still recognizable even without an image.
-function brandLogo(size: 72 | 64 | 40 | 32 = 64): string {
-  const logoSrc = loadLogoDataUri();
-  if (logoSrc) {
-    return `<img src="${logoSrc}" alt="Phucuong Export" width="${size}" height="${size}"
-                style="display:block;border:0;outline:none;text-decoration:none;
-                       border-radius:${size >= 48 ? "50%" : "6px"};
-                       ${size >= 48 ? "background-color:#ffffff;padding:4px;" : ""}" />`;
-  }
-  // Text-only fallback
-  return `<span style="display:inline-block;width:${size}px;height:${size}px;
-                         line-height:${size}px;text-align:center;
-                         background-color:${BRAND.green};color:${BRAND.white};
-                         border-radius:50%;font-size:${Math.round(size / 2.4)}px;
-                         font-weight:800;font-family:Arial,sans-serif;">PC</span>`;
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Base layout
 // ─────────────────────────────────────────────────────────────────────────────
 
-function baseLayout(content: string, _accentColor = BRAND.green): string {
+// Centralised contact details so brand voice stays consistent and easy to
+// update — every footer + every in-body link reads from the same source.
+const CONTACT = {
+  companyName: "Phucuong Logistic Co., Ltd.",
+  wordmark: "PHUCUONG LOGISTIC",
+  tagline: "Reliable Logistics & Premium Vietnamese Exports",
+  phoneDisplay: "+84 368 250 453",
+  phoneHref: "+84368250453", // tel: scheme — digits only with country code
+  email: "sales@phucuonglogistic.com",
+  website: "https://phucuonglogistic.com/",
+  websiteDisplay: "phucuonglogistic.com",
+  adminDashboard: "https://phucuonglogistic.com/admin",
+};
+
+function baseLayout(content: string, _accentColor = BRAND.brand): string {
   return `<!DOCTYPE html>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
@@ -139,7 +94,7 @@ function baseLayout(content: string, _accentColor = BRAND.green): string {
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="color-scheme" content="light only" />
   <meta name="supported-color-schemes" content="light only" />
-  <title>Phucuong Export</title>
+  <title>${CONTACT.companyName}</title>
   <!--[if mso]>
   <style type="text/css">
     table,td,div,h1,h2,h3,p,a {font-family: Arial, sans-serif !important;}
@@ -168,7 +123,7 @@ function baseLayout(content: string, _accentColor = BRAND.green): string {
 
         <!-- Preheader (hidden) -->
         <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;color:${BRAND.bg};line-height:1px;">
-          Phucuong Export — Premium Vietnamese agricultural products for the global market.
+          ${CONTACT.tagline}.
         </div>
 
         <!-- Outer card -->
@@ -176,45 +131,30 @@ function baseLayout(content: string, _accentColor = BRAND.green): string {
                style="max-width:600px;width:100%;background-color:${BRAND.cardBg};border-radius:14px;
                       box-shadow:0 6px 24px ${BRAND.shadow};overflow:hidden;border:1px solid ${BRAND.divider};">
 
-          <!-- Header banner: gradient green + logo -->
+          <!-- Header banner: gradient brand + wordmark -->
           <tr>
-            <td style="background:linear-gradient(135deg,${BRAND.green} 0%,${BRAND.greenDark} 100%);
-                       background-color:${BRAND.green};padding:0;">
+            <td style="background:linear-gradient(135deg,${BRAND.brand} 0%,${BRAND.brandDark} 100%);
+                       background-color:${BRAND.brand};padding:0;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
-                  <td class="pc-pad" style="padding:28px 32px;">
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                      <tr>
-                        <td valign="middle" style="width:72px;">
-                          <table role="presentation" cellpadding="0" cellspacing="0" border="0"
-                                 style="background-color:#ffffff;border-radius:50%;
-                                        box-shadow:0 4px 14px rgba(0,0,0,0.22);">
-                            <tr><td style="padding:6px;">
-                              ${brandLogo(72)}
-                            </td></tr>
-                          </table>
-                        </td>
-                        <td valign="middle" style="padding-left:16px;">
-                          <p style="margin:0;font-size:21px;font-weight:800;color:#ffffff;
-                                     letter-spacing:0.6px;line-height:1.1;">
-                            PHUCUONG EXPORT
-                          </p>
-                          <p style="margin:5px 0 0 0;font-size:11px;color:rgba(255,255,255,0.9);
-                                    letter-spacing:0.8px;text-transform:uppercase;font-weight:500;">
-                            Premium Vietnamese Agricultural Products
-                          </p>
-                        </td>
-                      </tr>
-                    </table>
+                  <td class="pc-pad" style="padding:32px 32px;">
+                    <p style="margin:0;font-size:22px;font-weight:800;color:#ffffff;
+                               letter-spacing:0.6px;line-height:1.1;">
+                      ${CONTACT.wordmark}
+                    </p>
+                    <p style="margin:8px 0 0 0;font-size:11px;color:rgba(255,255,255,0.9);
+                              letter-spacing:0.8px;text-transform:uppercase;font-weight:500;">
+                      ${CONTACT.tagline}
+                    </p>
                   </td>
                 </tr>
               </table>
             </td>
           </tr>
 
-          <!-- Yellow accent strip -->
+          <!-- Brand accent strip (echoes the divider rules used on the web app) -->
           <tr>
-            <td style="background-color:${BRAND.yellow};height:4px;font-size:0;line-height:0;">&nbsp;</td>
+            <td style="background-color:${BRAND.accent};height:4px;font-size:0;line-height:0;">&nbsp;</td>
           </tr>
 
           <!-- Body content -->
@@ -233,36 +173,21 @@ function baseLayout(content: string, _accentColor = BRAND.green): string {
 
           <!-- Footer -->
           <tr>
-            <td style="padding:20px 40px 28px 40px;background-color:${BRAND.footerBg};">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                <tr>
-                  <td valign="middle" style="width:40px;">
-                    <table role="presentation" cellpadding="0" cellspacing="0" border="0"
-                           style="background-color:${BRAND.white};border-radius:50%;
-                                  box-shadow:0 1px 3px rgba(0,0,0,0.12);">
-                      <tr><td style="padding:4px;">
-                        ${brandLogo(40)}
-                      </td></tr>
-                    </table>
-                  </td>
-                  <td valign="middle" style="padding-left:12px;">
-                    <p style="margin:0 0 3px 0;font-size:13px;font-weight:700;color:${BRAND.greenDark};
-                              letter-spacing:0.3px;">
-                      Phucuong Export Co., Ltd.
-                    </p>
-                    <p style="margin:0;font-size:11px;color:${BRAND.textLight};line-height:1.6;">
-                      <a href="mailto:contact@phucuong.com"
-                         style="color:${BRAND.textLight};text-decoration:none;">contact@phucuong.com</a>
-                      &nbsp;·&nbsp;
-                      <a href="tel:+842812345678"
-                         style="color:${BRAND.textLight};text-decoration:none;">+84 28 1234 5678</a>
-                      &nbsp;·&nbsp;
-                      <a href="https://www.phucuong.com"
-                         style="color:${BRAND.green};font-weight:600;text-decoration:none;">www.phucuong.com</a>
-                    </p>
-                  </td>
-                </tr>
-              </table>
+            <td style="padding:24px 40px 28px 40px;background-color:${BRAND.footerBg};">
+              <p style="margin:0 0 10px 0;font-size:14px;font-weight:700;color:${BRAND.brandDark};
+                        letter-spacing:0.3px;">
+                ${CONTACT.companyName}
+              </p>
+              <p style="margin:0;font-size:12px;color:${BRAND.textMuted};line-height:1.7;">
+                <a href="mailto:${CONTACT.email}"
+                   style="color:${BRAND.textMuted};text-decoration:none;">${CONTACT.email}</a>
+                &nbsp;·&nbsp;
+                <a href="tel:${CONTACT.phoneHref}"
+                   style="color:${BRAND.textMuted};text-decoration:none;">${CONTACT.phoneDisplay}</a>
+                &nbsp;·&nbsp;
+                <a href="${CONTACT.website}"
+                   style="color:${BRAND.brand};font-weight:600;text-decoration:none;">${CONTACT.websiteDisplay}</a>
+              </p>
               <p style="margin:16px 0 0 0;font-size:10px;color:#BBBBBB;line-height:1.5;
                         text-align:center;">
                 This email was sent automatically from our inquiry system.
@@ -287,14 +212,14 @@ function baseLayout(content: string, _accentColor = BRAND.green): string {
 
 function greetingBlock(name: string): string {
   return `<p style="margin:0 0 18px 0;font-size:16px;color:${BRAND.text};line-height:1.6;">
-    Dear <strong style="color:${BRAND.green};">${escapeHtml(name)}</strong>,
+    Dear <strong style="color:${BRAND.brand};">${escapeHtml(name)}</strong>,
   </p>`;
 }
 
-function sectionHeading(text: string, color = BRAND.greenDark): string {
+function sectionHeading(text: string, color = BRAND.brandDark): string {
   return `<p style="margin:0 0 12px 0;font-size:12px;font-weight:700;color:${color};
                   text-transform:uppercase;letter-spacing:1.2px;
-                  border-left:3px solid ${BRAND.yellow};padding-left:10px;">
+                  border-left:3px solid ${BRAND.accent};padding-left:10px;">
     ${text}
   </p>`;
 }
@@ -318,10 +243,10 @@ function bulletItem(text: string): string {
         <tr>
           <td valign="top" style="padding-top:8px;width:14px;">
             <span style="display:inline-block;width:6px;height:6px;
-                         background-color:${BRAND.green};border-radius:50%;"></span>
+                         background-color:${BRAND.brand};border-radius:50%;"></span>
           </td>
           <td valign="top" style="padding-left:10px;">
-            <span style="font-size:13px;color:#333333;line-height:1.7;">${text}</span>
+            <span style="font-size:13px;color:${BRAND.textMuted};line-height:1.7;">${text}</span>
           </td>
         </tr>
       </table>
@@ -329,13 +254,13 @@ function bulletItem(text: string): string {
   </tr>`;
 }
 
-function ctaButton(text: string, href: string, bgColor = BRAND.green): string {
+function ctaButton(text: string, href: string, bgColor = BRAND.brand): string {
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0"
          style="margin:24px 0 0 0;">
     <tr>
       <td style="border-radius:8px;background-color:${bgColor};
-                 background:linear-gradient(135deg,${bgColor} 0%,${BRAND.greenDark} 100%);
-                 box-shadow:0 4px 12px rgba(62,142,62,0.25);
+                 background:linear-gradient(135deg,${bgColor} 0%,${BRAND.brandDark} 100%);
+                 box-shadow:0 4px 12px ${BRAND.shadow};
                  padding:14px 32px;" align="center">
         <a href="${escapeHtml(href)}" target="_blank"
            style="font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;
@@ -349,7 +274,7 @@ function ctaButton(text: string, href: string, bgColor = BRAND.green): string {
 
 function infoCard(content: string, padding = "20px"): string {
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
-         style="background-color:${BRAND.greenSoft};border:1px solid ${BRAND.greenBorder};
+         style="background-color:${BRAND.brandSoft};border:1px solid ${BRAND.brandBorder};
                 border-radius:10px;margin-bottom:22px;">
     <tr><td style="padding:${padding};">
       ${content}
@@ -377,7 +302,7 @@ export function customerAckTemplate(data: EmailTemplateData): { subject: string;
   const content = `
     ${greetingBlock(customerName)}
 
-    <p style="margin:0 0 24px 0;font-size:15px;color:#444444;line-height:1.7;">
+    <p style="margin:0 0 24px 0;font-size:15px;color:${BRAND.textMuted};line-height:1.7;">
       Thank you for reaching out to us! We have successfully received your inquiry
       and our team is already reviewing the details.
     </p>
@@ -386,10 +311,10 @@ export function customerAckTemplate(data: EmailTemplateData): { subject: string;
     <table role="presentation" cellpadding="0" cellspacing="0" border="0"
            style="margin-bottom:24px;">
       <tr>
-        <td style="border-radius:24px;background-color:${BRAND.greenSoft};
-                    border:1px solid ${BRAND.greenBorder};
+        <td style="border-radius:24px;background-color:${BRAND.brandSoft};
+                    border:1px solid ${BRAND.brandBorder};
                     padding:8px 18px;">
-          <span style="font-size:12px;font-weight:700;color:${BRAND.greenDark};
+          <span style="font-size:12px;font-weight:700;color:${BRAND.brandDark};
                        letter-spacing:0.6px;">
             ✓ &nbsp;INQUIRY RECEIVED
           </span>
@@ -407,20 +332,20 @@ export function customerAckTemplate(data: EmailTemplateData): { subject: string;
 
     <p style="margin:0 0 24px 0;font-size:13px;color:${BRAND.textMuted};line-height:1.7;">
       In the meantime, feel free to browse our
-      <a href="https://www.phucuong.com/products"
-         style="color:${BRAND.green};font-weight:600;text-decoration:none;">product catalog</a>
+      <a href="${CONTACT.website}products"
+         style="color:${BRAND.brand};font-weight:600;text-decoration:none;">product catalog</a>
       or learn more about our
-      <a href="https://www.phucuong.com"
-         style="color:${BRAND.green};font-weight:600;text-decoration:none;">export capabilities</a>.
+      <a href="${CONTACT.website}"
+         style="color:${BRAND.brand};font-weight:600;text-decoration:none;">export capabilities</a>.
     </p>
 
-    <p style="margin:0;font-size:13px;color:#555555;line-height:1.7;">
+    <p style="margin:0;font-size:13px;color:${BRAND.textMuted};line-height:1.7;">
       We look forward to serving you.
     </p>
   `;
 
   return {
-    subject: `We've received your inquiry — Phucuong Export`,
+    subject: `We've received your inquiry — ${CONTACT.companyName}`,
     html: baseLayout(content),
   };
 }
@@ -433,7 +358,7 @@ export function customerConfirmTemplate(data: EmailTemplateData): { subject: str
   const { customerName, productName, tradeTerm, quantity } = data;
 
   const summaryBody = `
-    <p style="margin:0 0 14px 0;font-size:12px;font-weight:700;color:${BRAND.greenDark};
+    <p style="margin:0 0 14px 0;font-size:12px;font-weight:700;color:${BRAND.brandDark};
                text-transform:uppercase;letter-spacing:1.2px;">
       Inquiry Summary
     </p>
@@ -448,8 +373,8 @@ export function customerConfirmTemplate(data: EmailTemplateData): { subject: str
   const content = `
     ${greetingBlock(customerName)}
 
-    <p style="margin:0 0 24px 0;font-size:15px;color:#444444;line-height:1.7;">
-      Your inquiry has been <strong style="color:${BRAND.green};">submitted successfully</strong>.
+    <p style="margin:0 0 24px 0;font-size:15px;color:${BRAND.textMuted};line-height:1.7;">
+      Your inquiry has been <strong style="color:${BRAND.brand};">submitted successfully</strong>.
       Here is a summary of what we received:
     </p>
 
@@ -457,10 +382,10 @@ export function customerConfirmTemplate(data: EmailTemplateData): { subject: str
     <table role="presentation" cellpadding="0" cellspacing="0" border="0"
            style="margin-bottom:24px;">
       <tr>
-        <td style="border-radius:24px;background-color:${BRAND.greenSoft};
-                    border:1px solid ${BRAND.greenBorder};
+        <td style="border-radius:24px;background-color:${BRAND.brandSoft};
+                    border:1px solid ${BRAND.brandBorder};
                     padding:8px 18px;">
-          <span style="font-size:12px;font-weight:700;color:${BRAND.greenDark};
+          <span style="font-size:12px;font-weight:700;color:${BRAND.brandDark};
                        letter-spacing:0.6px;">
             ✓ &nbsp;SUBMITTED SUCCESSFULLY
           </span>
@@ -479,13 +404,13 @@ export function customerConfirmTemplate(data: EmailTemplateData): { subject: str
     </table>
 
     <p style="margin:0 0 8px 0;font-size:13px;color:${BRAND.textMuted};line-height:1.7;">
-      Thank you for your interest in Phucuong Export. We are committed to providing
+      Thank you for your interest in ${CONTACT.companyName}. We are committed to providing
       you with the highest quality Vietnamese agricultural products and exceptional service.
     </p>
   `;
 
   return {
-    subject: `Your inquiry has been submitted — Phucuong Export`,
+    subject: `Your inquiry has been submitted — ${CONTACT.companyName}`,
     html: baseLayout(content),
   };
 }
@@ -513,10 +438,10 @@ function calculationSection(calc: InquiryCalculationEmailData | undefined): stri
 
   const statusColor =
     calc.moqStatus === "ok"
-      ? BRAND.green
+      ? BRAND.brand
       : calc.moqStatus === "below_moq"
-        ? "#D32F2F"
-        : "#FF8F00";
+        ? BRAND.statusError
+        : BRAND.statusWarn;
   const statusText =
     calc.moqStatus === "ok"
       ? "✓ Meets MOQ"
@@ -525,10 +450,10 @@ function calculationSection(calc: InquiryCalculationEmailData | undefined): stri
         : "— No MOQ Config";
   const statusBg =
     calc.moqStatus === "ok"
-      ? BRAND.greenSoft
+      ? BRAND.brandSoft
       : calc.moqStatus === "below_moq"
-        ? "#FFEBEE"
-        : "#FFF8E1";
+        ? BRAND.statusErrorBg
+        : BRAND.statusWarnBg;
 
   return `
     ${sectionHeading("Container & MOQ Calculation")}
@@ -574,10 +499,10 @@ export function internalNotificationTemplate(
   });
 
   const certSection = certificates?.length
-    ? `<tr><td style="padding:6px 0;font-size:13px;"><strong style="color:${BRAND.greenDark};">Certificates:</strong> ${escapeHtml(certificates.join(", "))}</td></tr>`
+    ? `<tr><td style="padding:6px 0;font-size:13px;"><strong style="color:${BRAND.brandDark};">Certificates:</strong> ${escapeHtml(certificates.join(", "))}</td></tr>`
     : "";
   const otherDocSection = otherDocuments?.length
-    ? `<tr><td style="padding:6px 0;font-size:13px;"><strong style="color:${BRAND.greenDark};">Other Documents:</strong> ${escapeHtml(otherDocuments.join(", "))}</td></tr>`
+    ? `<tr><td style="padding:6px 0;font-size:13px;"><strong style="color:${BRAND.brandDark};">Other Documents:</strong> ${escapeHtml(otherDocuments.join(", "))}</td></tr>`
     : "";
 
   const requirementsSection = certSection || otherDocSection
@@ -616,17 +541,17 @@ export function internalNotificationTemplate(
 
   const content = `
     <p style="margin:0 0 20px 0;font-size:16px;color:${BRAND.text};line-height:1.6;">
-      A new inquiry has been ${isFinal ? `<strong style="color:${BRAND.green};">submitted</strong>` : "updated"} in the system.
+      A new inquiry has been ${isFinal ? `<strong style="color:${BRAND.brand};">submitted</strong>` : "updated"} in the system.
     </p>
 
     <!-- Status badge -->
     <table role="presentation" cellpadding="0" cellspacing="0" border="0"
            style="margin-bottom:24px;">
       <tr>
-        <td style="border-radius:24px;background-color:${isFinal ? BRAND.greenSoft : "#FFF8E1"};
-                    border:1px solid ${isFinal ? BRAND.greenBorder : "#FFE082"};
+        <td style="border-radius:24px;background-color:${isFinal ? BRAND.brandSoft : BRAND.statusWarnBg};
+                    border:1px solid ${isFinal ? BRAND.brandBorder : BRAND.statusWarnBorder};
                     padding:8px 18px;">
-          <span style="font-size:12px;font-weight:700;color:${isFinal ? BRAND.greenDark : "#F57F17"};
+          <span style="font-size:12px;font-weight:700;color:${isFinal ? BRAND.brandDark : "#B45309"};
                        letter-spacing:0.6px;">
             ${isFinal ? "✓ FINAL SUBMISSION" : `STEP ${step} — ${stepLabel.toUpperCase()}`}
           </span>
@@ -648,8 +573,8 @@ export function internalNotificationTemplate(
 
     ${ctaButton(
       "View Inquiry in Admin Dashboard",
-      `${process.env.ADMIN_APP_URL ?? "https://admin.phucuong.com"}/inquiries/${inquiryId}`,
-      BRAND.green,
+      `${CONTACT.adminDashboard}/inquiries/${inquiryId}`,
+      BRAND.brand,
     )}
 
     <p style="margin:24px 0 0 0;font-size:12px;color:${BRAND.textLight};line-height:1.6;">
@@ -659,6 +584,6 @@ export function internalNotificationTemplate(
 
   return {
     subject: `[${ref}] Inquiry ${isFinal ? "SUBMITTED" : `— Step ${step} ${stepLabel}`}`,
-    html: baseLayout(content, isFinal ? BRAND.greenDark : BRAND.green),
+    html: baseLayout(content, isFinal ? BRAND.brandDark : BRAND.brand),
   };
 }
