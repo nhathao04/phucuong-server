@@ -1,13 +1,19 @@
 import {
   Injectable,
   NotFoundException,
+  BadRequestException,
   Inject,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, Like } from "typeorm";
 import { Quote } from "./entities/quote.entity";
+import { Product } from "../products/entities/product.entity";
 import { User } from "../users/entities/user.entity";
-import { CreateQuoteDto, UpdateQuoteDto } from "./dto/quote-request.dto";
+import {
+  CreateQuoteDto,
+  ProductSource,
+  UpdateQuoteDto,
+} from "./dto/quote-request.dto";
 import {
   QuoteResponseDto,
   QuoteListResponseDto,
@@ -19,6 +25,8 @@ export class QuotesService {
   constructor(
     @InjectRepository(Quote)
     private readonly quoteRepo: Repository<Quote>,
+    @InjectRepository(Product)
+    private readonly productRepo: Repository<Product>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
   ) {}
@@ -28,6 +36,48 @@ export class QuotesService {
   // ─────────────────────────────────────────────────────────────────────────────
 
   async create(dto: CreateQuoteDto): Promise<QuotePublicResponseDto> {
+    // Resolve productSource:
+    //   - if FE sent it explicitly, trust it
+    //   - otherwise infer from productId presence:
+    //       productId non-empty → catalog
+    //       productId empty/absent → others
+    const effectiveSource: ProductSource =
+      dto.productSource ??
+      (dto.productId && dto.productId.length > 0
+        ? ProductSource.CATALOG
+        : ProductSource.OTHERS);
+
+    let normalizedProductId: string | null = null;
+    let normalizedProductName: string | null = null;
+
+    if (effectiveSource === ProductSource.CATALOG) {
+      if (!dto.productId) {
+        throw new BadRequestException(
+          "productId is required when productSource='catalog'",
+        );
+      }
+      const productExists = await this.productRepo.exist({
+        where: { id: dto.productId },
+      });
+      if (!productExists) {
+        throw new BadRequestException(`Product ${dto.productId} not found`);
+      }
+      normalizedProductId = dto.productId;
+      normalizedProductName = dto.productName?.trim() || null;
+    } else {
+      if (dto.productId) {
+        throw new BadRequestException(
+          "productId must be omitted when productSource='others'",
+        );
+      }
+      if (!dto.productName || dto.productName.trim().length === 0) {
+        throw new BadRequestException(
+          "productName is required when productSource='others'",
+        );
+      }
+      normalizedProductName = dto.productName.trim();
+    }
+
     // Generate unique quote code
     const code = await this.generateQuoteCode();
 
@@ -40,8 +90,9 @@ export class QuotesService {
       email: dto.email,
       phone: dto.phone ?? null,
       whatsapp: dto.whatsapp ?? null,
-      productId: dto.productId ?? null,
-      productName: dto.productName ?? null,
+      productSource: effectiveSource,
+      productId: normalizedProductId,
+      productName: normalizedProductName,
       quantity: dto.quantity ?? null,
       notes: dto.notes ?? null,
     });
@@ -268,6 +319,7 @@ export class QuotesService {
       phone: quote.phone,
       whatsapp: quote.whatsapp,
       productId: quote.productId,
+      productSource: quote.productSource,
       productName: quote.productName,
       quantity: quote.quantity,
       notes: quote.notes,

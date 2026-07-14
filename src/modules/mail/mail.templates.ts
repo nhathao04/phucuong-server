@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, existsSync } from "node:fs";
+import { join, dirname } from "node:path";
 
 export interface InquiryCalculationEmailData {
   estimatedContainers?: number | null;
@@ -73,14 +73,25 @@ function loadLogoDataUri(): string | null {
   }
 
   // 2. Otherwise read logo.png from disk. Try several locations so we work
-  //    both in dev (cwd=project root) and in production (cwd=dist/src).
+  //    both in dev (cwd=project root), in production (cwd=dist/src), and
+  //    when running under PM2/systemd where cwd can be anything.
+  //    __dirname-based candidates are the most reliable because they anchor
+  //    to the compiled module's location rather than the process cwd.
   const candidates = [
     join(process.cwd(), "public", "mail", "logo.png"),
     join(process.cwd(), "..", "public", "mail", "logo.png"),
     join(process.cwd(), "..", "..", "public", "mail", "logo.png"),
+    // Anchored to this module's compiled location (dist/src/modules/mail)
+    // → dist/src/modules/mail/../../../../public/mail/logo.png = public/mail/logo.png
+    join(__dirname, "..", "..", "..", "..", "public", "mail", "logo.png"),
+    join(__dirname, "..", "..", "..", "public", "mail", "logo.png"),
+    join(__dirname, "..", "..", "public", "mail", "logo.png"),
+    // Source-tree fallback (when running via ts-node from src/)
+    join(__dirname, "..", "..", "..", "..", "public", "mail", "logo.png"),
   ];
   for (const logoPath of candidates) {
     try {
+      if (!existsSync(logoPath)) continue;
       const buf = readFileSync(logoPath);
       cachedLogoDataUri = `data:image/png;base64,${buf.toString("base64")}`;
       return cachedLogoDataUri;
@@ -96,10 +107,10 @@ function loadLogoDataUri(): string | null {
   return null;
 }
 
-// Returns a `<img>` tag for the logo. Width: 64px header / 32px footer.
+// Returns a `<img>` tag for the logo. Width: 72px header / 40px footer.
 // If embedding fails completely we fall back to a styled text wordmark so
 // the brand is still recognizable even without an image.
-function brandLogo(size: 64 | 40 | 32 = 64): string {
+function brandLogo(size: 72 | 64 | 40 | 32 = 64): string {
   const logoSrc = loadLogoDataUri();
   if (logoSrc) {
     return `<img src="${logoSrc}" alt="Phucuong Export" width="${size}" height="${size}"
@@ -171,38 +182,27 @@ function baseLayout(content: string, _accentColor = BRAND.green): string {
                        background-color:${BRAND.green};padding:0;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
-                  <td class="pc-pad" style="padding:24px 32px;">
+                  <td class="pc-pad" style="padding:28px 32px;">
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                       <tr>
-                        <td valign="middle" style="width:64px;">
+                        <td valign="middle" style="width:72px;">
                           <table role="presentation" cellpadding="0" cellspacing="0" border="0"
                                  style="background-color:#ffffff;border-radius:50%;
-                                        box-shadow:0 2px 6px rgba(0,0,0,0.18);">
+                                        box-shadow:0 4px 14px rgba(0,0,0,0.22);">
                             <tr><td style="padding:6px;">
-                              ${brandLogo(64)}
+                              ${brandLogo(72)}
                             </td></tr>
                           </table>
                         </td>
-                        <td valign="middle" style="padding-left:14px;">
-                          <p style="margin:0;font-size:20px;font-weight:700;color:#ffffff;
-                                     letter-spacing:0.4px;line-height:1.1;">
+                        <td valign="middle" style="padding-left:16px;">
+                          <p style="margin:0;font-size:21px;font-weight:800;color:#ffffff;
+                                     letter-spacing:0.6px;line-height:1.1;">
                             PHUCUONG EXPORT
                           </p>
-                          <p style="margin:4px 0 0 0;font-size:11px;color:rgba(255,255,255,0.85);
-                                    letter-spacing:0.6px;text-transform:uppercase;">
+                          <p style="margin:5px 0 0 0;font-size:11px;color:rgba(255,255,255,0.9);
+                                    letter-spacing:0.8px;text-transform:uppercase;font-weight:500;">
                             Premium Vietnamese Agricultural Products
                           </p>
-                        </td>
-                        <td align="right" valign="middle" class="pc-hide">
-                          <div style="display:inline-block;background-color:rgba(255,255,255,0.15);
-                                      border:1px solid rgba(255,255,255,0.25);border-radius:8px;
-                                      padding:8px 14px;backdrop-filter:blur(4px);">
-                            <p style="margin:0;font-size:9px;font-weight:700;color:${BRAND.yellow};
-                                       letter-spacing:1.2px;">REF</p>
-                            <p style="margin:2px 0 0 0;font-size:14px;font-weight:700;color:#ffffff;">
-                              ${`{{ inquiryCode }}`}
-                            </p>
-                          </div>
                         </td>
                       </tr>
                     </table>
@@ -372,8 +372,7 @@ function escapeHtml(value: string | undefined | null): string {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function customerAckTemplate(data: EmailTemplateData): { subject: string; html: string } {
-  const { customerName, inquiryCode, inquiryId } = data;
-  const ref = escapeHtml(inquiryCode ?? inquiryId);
+  const { customerName } = data;
 
   const content = `
     ${greetingBlock(customerName)}
@@ -404,7 +403,6 @@ export function customerAckTemplate(data: EmailTemplateData): { subject: string;
       ${bulletItem("Our sales team will review your requirements within <strong>24 hours</strong>.")}
       ${bulletItem("You will receive a <strong>formal quotation</strong> tailored to your needs.")}
       ${bulletItem("We may contact you via email or WhatsApp for any clarifications.")}
-      ${bulletItem(`Your inquiry reference: <strong style="color:${BRAND.green};">${ref}</strong>`)}
     </table>
 
     <p style="margin:0 0 24px 0;font-size:13px;color:${BRAND.textMuted};line-height:1.7;">
@@ -422,7 +420,7 @@ export function customerAckTemplate(data: EmailTemplateData): { subject: string;
   `;
 
   return {
-    subject: `We've received your inquiry — ${ref}`,
+    subject: `We've received your inquiry — Phucuong Export`,
     html: baseLayout(content),
   };
 }
@@ -432,7 +430,7 @@ export function customerAckTemplate(data: EmailTemplateData): { subject: string;
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function customerConfirmTemplate(data: EmailTemplateData): { subject: string; html: string } {
-  const { customerName, inquiryCode, inquiryId, productName, tradeTerm, quantity } = data;
+  const { customerName, productName, tradeTerm, quantity } = data;
 
   const summaryBody = `
     <p style="margin:0 0 14px 0;font-size:12px;font-weight:700;color:${BRAND.greenDark};
@@ -440,7 +438,6 @@ export function customerConfirmTemplate(data: EmailTemplateData): { subject: str
       Inquiry Summary
     </p>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-      ${infoRow("Reference No.", inquiryCode)}
       ${infoRow("Product", productName)}
       ${infoRow("Quantity", quantity)}
       ${infoRow("Trade Term", tradeTerm)}
@@ -479,7 +476,6 @@ export function customerConfirmTemplate(data: EmailTemplateData): { subject: str
       ${bulletItem("Our sales team will review your inquiry and prepare a detailed quotation.")}
       ${bulletItem("Expected response time: <strong>24–48 business hours</strong>.")}
       ${bulletItem("A dedicated sales representative will contact you via email or phone.")}
-      ${bulletItem(`All communications will reference your inquiry code: <strong style="color:${BRAND.green};">${escapeHtml(inquiryCode ?? inquiryId)}</strong>`)}
     </table>
 
     <p style="margin:0 0 8px 0;font-size:13px;color:${BRAND.textMuted};line-height:1.7;">
@@ -489,7 +485,7 @@ export function customerConfirmTemplate(data: EmailTemplateData): { subject: str
   `;
 
   return {
-    subject: `Your inquiry has been submitted — ${escapeHtml(inquiryCode ?? "")}`,
+    subject: `Your inquiry has been submitted — Phucuong Export`,
     html: baseLayout(content),
   };
 }

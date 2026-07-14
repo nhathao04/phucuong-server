@@ -42,6 +42,9 @@ export class Quote {
   whatsapp!: string | null;
 
   // Product Information (from inquiry form)
+  @Column({ type: "varchar", length: 20, nullable: true })
+  productSource!: "catalog" | "others" | null;
+
   @Column({ type: "uuid", nullable: true })
   productId!: string | null;
 

@@ -30,6 +30,12 @@ export class QuoteResponseDto {
   @ApiPropertyOptional()
   productId!: string | null;
 
+  @ApiPropertyOptional({
+    description: "Where the product comes from. 'catalog' → productId is the source of truth. 'others' → productName was free-text.",
+    enum: ["catalog", "others"],
+  })
+  productSource!: "catalog" | "others" | null;
+
   @ApiPropertyOptional()
   productName!: string | null;
 
