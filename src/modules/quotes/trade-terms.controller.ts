@@ -23,7 +23,7 @@ export class TradeTermResponseDto {
 }
 
 @ApiTags("Quotes")
-@Controller("api/trade-terms")
+@Controller("trade-terms")
 export class TradeTermsController {
   constructor(
     @InjectRepository(TradeTerm)
