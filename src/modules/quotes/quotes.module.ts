@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { TradeTerm } from "../products/entities/trade-term.entity";
+import { Product } from "../products/entities/product.entity";
 import { Quote } from "./entities/quote.entity";
 import { User } from "../users/entities/user.entity";
 import { UsersModule } from "../users/users.module";
@@ -14,6 +15,7 @@ import { QuotesService } from "./quotes.service";
       Quote,
       User,
       TradeTerm,
+      Product,
     ]),
     UsersModule,
   ],
