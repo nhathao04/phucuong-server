@@ -12,6 +12,7 @@ import { QuoteItem } from "./quote-item.entity";
 import { QuoteCertificate } from "./quote-certificate.entity";
 import { User } from "../../users/entities/user.entity";
 import { Certificate } from "../../inquiries/entities/certificate.entity";
+import { TradeTerm } from "../../products/entities/trade-term.entity";
 
 @Entity({ name: "quotes" })
 export class Quote {
@@ -42,6 +43,9 @@ export class Quote {
   whatsapp!: string | null;
 
   // Product Information (from inquiry form)
+  @Column({ type: "varchar", length: 20, nullable: true })
+  productSource!: "catalog" | "others" | null;
+
   @Column({ type: "uuid", nullable: true })
   productId!: string | null;
 
@@ -53,6 +57,25 @@ export class Quote {
 
   @Column({ type: "varchar", length: 100, nullable: true })
   containerType!: string | null;
+
+  // Preferred price terms
+  //   - tradeTermId: FK to a real TradeTerm row when the customer picked from
+  //     the BE-managed dropdown (FOB, CIF, …). nullable: customer may not
+  //     have a preference.
+  //   - tradeTermName: display value persisted at write time. Sourced from
+  //     TradeTerm.name when id is set, or from the customer's free-form
+  //     text otherwise. Keeping it denormalised on Quote means historical
+  //     rows stay readable even if the underlying TradeTerm is later
+  //     renamed/deactivated — and we don't need to LEFT JOIN on the read
+  //     path just to render a label.
+  @Column({ type: "int", nullable: true })
+  tradeTermId!: number | null;
+
+  @ManyToOne(() => TradeTerm, { onDelete: "SET NULL", nullable: true })
+  tradeTerm!: TradeTerm | null;
+
+  @Column({ type: "varchar", length: 255, nullable: true })
+  tradeTermName!: string | null;
 
   @Column({ type: "text", nullable: true })
   notes!: string | null;

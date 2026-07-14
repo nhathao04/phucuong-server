@@ -1,13 +1,20 @@
 import {
   Injectable,
   NotFoundException,
+  BadRequestException,
   Inject,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, Like } from "typeorm";
 import { Quote } from "./entities/quote.entity";
+import { Product } from "../products/entities/product.entity";
+import { TradeTerm } from "../products/entities/trade-term.entity";
 import { User } from "../users/entities/user.entity";
-import { CreateQuoteDto, UpdateQuoteDto } from "./dto/quote-request.dto";
+import {
+  CreateQuoteDto,
+  ProductSource,
+  UpdateQuoteDto,
+} from "./dto/quote-request.dto";
 import {
   QuoteResponseDto,
   QuoteListResponseDto,
@@ -19,6 +26,10 @@ export class QuotesService {
   constructor(
     @InjectRepository(Quote)
     private readonly quoteRepo: Repository<Quote>,
+    @InjectRepository(Product)
+    private readonly productRepo: Repository<Product>,
+    @InjectRepository(TradeTerm)
+    private readonly tradeTermRepo: Repository<TradeTerm>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
   ) {}
@@ -28,6 +39,82 @@ export class QuotesService {
   // ─────────────────────────────────────────────────────────────────────────────
 
   async create(dto: CreateQuoteDto): Promise<QuotePublicResponseDto> {
+    // Resolve productSource:
+    //   - if FE sent it explicitly, trust it
+    //   - otherwise infer from productId presence:
+    //       productId non-empty → catalog
+    //       productId empty/absent → others
+    const effectiveSource: ProductSource =
+      dto.productSource ??
+      (dto.productId && dto.productId.length > 0
+        ? ProductSource.CATALOG
+        : ProductSource.OTHERS);
+
+    let normalizedProductId: string | null = null;
+    let normalizedProductName: string | null = null;
+
+    if (effectiveSource === ProductSource.CATALOG) {
+      if (!dto.productId) {
+        throw new BadRequestException(
+          "productId is required when productSource='catalog'",
+        );
+      }
+      const productExists = await this.productRepo.exist({
+        where: { id: dto.productId },
+      });
+      if (!productExists) {
+        throw new BadRequestException(`Product ${dto.productId} not found`);
+      }
+      normalizedProductId = dto.productId;
+      normalizedProductName = dto.productName?.trim() || null;
+    } else {
+      if (dto.productId) {
+        throw new BadRequestException(
+          "productId must be omitted when productSource='others'",
+        );
+      }
+      if (!dto.productName || dto.productName.trim().length === 0) {
+        throw new BadRequestException(
+          "productName is required when productSource='others'",
+        );
+      }
+      normalizedProductName = dto.productName.trim();
+    }
+
+    // Resolve preferred price terms into a single display value stored in
+    // `tradeTermName`:
+    //   - tradeTermId present  → validate FK exists & is active, persist
+    //                            `TradeTerm.name`. Any free-form text sent
+    //                            alongside is ignored.
+    //   - tradeTermId absent + tradeTermName non-empty → persist the text
+    //                            verbatim (e.g. "Not sure - need advise")
+    //   - both absent → leave null (no preference declared)
+    let normalizedTradeTermId: number | null = null;
+    let normalizedTradeTermName: string | null = null;
+
+    if (dto.tradeTermId !== undefined && dto.tradeTermId !== null) {
+      const term = await this.tradeTermRepo.findOne({
+        where: { id: dto.tradeTermId },
+      });
+      if (!term) {
+        throw new BadRequestException(
+          `Trade term ${dto.tradeTermId} not found`,
+        );
+      }
+      if (term.isActive === false) {
+        throw new BadRequestException(
+          `Trade term '${term.name}' is inactive and cannot be selected`,
+        );
+      }
+      normalizedTradeTermId = term.id;
+      normalizedTradeTermName = term.name;
+    } else if (
+      dto.tradeTermName !== undefined &&
+      dto.tradeTermName.trim().length > 0
+    ) {
+      normalizedTradeTermName = dto.tradeTermName.trim();
+    }
+
     // Generate unique quote code
     const code = await this.generateQuoteCode();
 
@@ -40,9 +127,12 @@ export class QuotesService {
       email: dto.email,
       phone: dto.phone ?? null,
       whatsapp: dto.whatsapp ?? null,
-      productId: dto.productId ?? null,
-      productName: dto.productName ?? null,
+      productSource: effectiveSource,
+      productId: normalizedProductId,
+      productName: normalizedProductName,
       quantity: dto.quantity ?? null,
+      tradeTermId: normalizedTradeTermId,
+      tradeTermName: normalizedTradeTermName,
       notes: dto.notes ?? null,
     });
 
@@ -90,7 +180,8 @@ export class QuotesService {
 
     const qb = this.quoteRepo
       .createQueryBuilder("quote")
-      .leftJoinAndSelect("quote.assignedTo", "assignedTo");
+      .leftJoinAndSelect("quote.assignedTo", "assignedTo")
+      .leftJoinAndSelect("quote.tradeTerm", "tradeTerm");
 
     if (params.assignedToId !== undefined && params.assignedToId !== null) {
       qb.andWhere("quote.assignedToId = :assignedToId", {
@@ -126,7 +217,7 @@ export class QuotesService {
   async findOneStaff(id: number): Promise<QuoteResponseDto> {
     const quote = await this.quoteRepo.findOne({
       where: { id },
-      relations: ["assignedTo"],
+      relations: ["assignedTo", "tradeTerm"],
     });
 
     if (!quote) {
@@ -258,6 +349,14 @@ export class QuotesService {
   }
 
   private toResponseDto(quote: Quote): QuoteResponseDto {
+    // `tradeTermName` is the persisted display value — it already reflects
+    // either the TradeTerm snapshot or the customer's free-form text. We
+    // prefer the live TradeTerm.name when the relation is joined, so staff
+    // UI shows renames immediately for current quotes, while the persisted
+    // column keeps historical rows readable if the relation is gone.
+    const tradeTermName: string | null =
+      quote.tradeTerm?.name ?? quote.tradeTermName ?? null;
+
     return {
       id: quote.id,
       code: quote.code,
@@ -268,8 +367,11 @@ export class QuotesService {
       phone: quote.phone,
       whatsapp: quote.whatsapp,
       productId: quote.productId,
+      productSource: quote.productSource,
       productName: quote.productName,
       quantity: quote.quantity,
+      tradeTermId: quote.tradeTermId,
+      tradeTermName,
       notes: quote.notes,
       contacted: quote.contacted,
       assignedToId: quote.assignedToId,
