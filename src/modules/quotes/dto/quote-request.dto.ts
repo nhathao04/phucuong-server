@@ -5,6 +5,8 @@ import {
   IsOptional,
   IsBoolean,
   IsIn,
+  IsInt,
+  Min,
   MaxLength,
 } from "class-validator";
 import { Transform } from "class-transformer";
@@ -120,6 +122,37 @@ export class CreateQuoteDto {
   @Transform(emptyToUndefined)
   @IsString()
   quantity?: string;
+
+  // Preferred price terms
+  // FE has two ways to convey a preference:
+  //   1. Pick from the BE-managed list (loaded via GET /api/trade-terms) →
+  //      send `tradeTermId`. Server validates FK + activity, persists the
+  //      TradeTerm.name into `tradeTermName`.
+  //   2. Type a custom string (e.g. "Not sure - need advise") → send
+  //      `tradeTermName` verbatim.
+  // `tradeTermId` wins if both are sent. Both fields are optional — a quote
+  // is allowed to have no price-term preference.
+  @ApiPropertyOptional({
+    example: 1,
+    description:
+      "FK to a TradeTerm row (FOB, CIF, EXW, …). Send this when the customer picked an option from the FE dropdown.",
+  })
+  @IsOptional()
+  @Transform(emptyToUndefined)
+  @IsInt()
+  @Min(1)
+  tradeTermId?: number;
+
+  @ApiPropertyOptional({
+    example: "Not sure - need advise",
+    description:
+      "Free-form text for the customer's preferred price terms. Used when the customer types a value not in the BE list, or selects the 'Not sure' option. If `tradeTermId` is also sent, it takes precedence and this field is ignored.",
+  })
+  @IsOptional()
+  @Transform(emptyToUndefined)
+  @IsString()
+  @MaxLength(255)
+  tradeTermName?: string;
 
   // Additional Requirements
   @ApiPropertyOptional({ example: "Please provide FOB and CIF pricing" })

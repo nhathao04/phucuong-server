@@ -42,6 +42,20 @@ export class QuoteResponseDto {
   @ApiPropertyOptional()
   quantity!: string | null;
 
+  // Preferred price terms
+  @ApiPropertyOptional({
+    description: "FK to a TradeTerm row when the customer picked from the BE list.",
+  })
+  tradeTermId!: number | null;
+
+  @ApiPropertyOptional({
+    description:
+      "Display value for the price-terms preference. Resolved at write time " +
+      "from TradeTerm.name (if id was set) or the customer's free-form text. " +
+      "Stays readable even if the underlying TradeTerm is later renamed.",
+  })
+  tradeTermName!: string | null;
+
   @ApiPropertyOptional()
   notes!: string | null;
 
