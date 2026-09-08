@@ -116,9 +116,9 @@ export const typeOrmAsyncConfig = (
     connectionTimeoutMillis: 2000,
     statement_timeout: 15000,
     query_timeout: 15000,
+    keepAlive: true,
   },
-  poolSize: 10,
-  connectTimeoutMS: 2000,
+  // poolSize / connectTimeoutMS managed via `extra` (pg pool options)
 });
 
 export const typeOrmModuleAsyncOptions: TypeOrmModuleAsyncOptions = {
