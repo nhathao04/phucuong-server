@@ -8,6 +8,21 @@ import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 import { ResponseInterceptor } from "./common/interceptors/response.interceptor";
 import { join } from "node:path";
 
+// Ensure process exits on unhandled errors so PM2 can restart and recreate DB pool
+process.on('unhandledRejection', (reason) => {
+  // Log and exit so the process manager (PM2) will restart the app
+  // and new DB connections / pools will be created.
+  // eslint-disable-next-line no-console
+  console.error('Unhandled Rejection at:', reason);
+  process.exit(1);
+});
+
+process.on('uncaughtException', (err) => {
+  // eslint-disable-next-line no-console
+  console.error('Uncaught Exception thrown:', err);
+  process.exit(1);
+});
+
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
